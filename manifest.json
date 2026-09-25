@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "tathagat11.checklist-todo",
+  "name": "Checklist Todo",
+  "version": "1.0.0",
+  "author": "tathagat11",
+  "license": "MIT",
+  "description": "A tiny todo list in the Omarchy bar: add items with a name and description, open an item to read its details, and check it off to remove it.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Checklist Todo",
+    "description": "A tiny todo list in the bar. Add items with a name and description, click one to read it, click its checkbox to remove it.",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
