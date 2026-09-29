@@ -423,6 +423,19 @@ function visibleItems(items, sessionDone) {
   return (items || []).filter(function(it) { return it && (it.status !== "done" || done[it.id]) })
 }
 
+// The session's done rows minus the ones that are no longer done: a
+// reverted write, an external reopen or a delete. Everything that reads
+// `sessionDone` reads this, so the status stays the one source of truth.
+function pruneSessionDone(sessionDone, items) {
+  var map = sessionDone || {}
+  var out = {}
+  for (var id in map) {
+    var it = findItem(items, id)
+    if (it && it.status === "done") out[id] = map[id]
+  }
+  return out
+}
+
 function openCount(items) {
   return (items || []).filter(function(it) { return it && it.status !== "done" }).length
 }

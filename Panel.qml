@@ -45,8 +45,11 @@ Panel {
 
   // ---- state
   property var ui: KeyMap.initialUi()
-  // Rows ticked done during this panel session: id -> pre-tick status.
+  // Rows ticked done during this panel session: id -> pre-tick status. Only
+  // the pruned map is read, so a reverted write or an external reopen drops
+  // the row from it at once (UX §4.5 done-row rule; PLAN A34b).
   property var sessionDone: ({})
+  readonly property var liveSessionDone: Model.pruneSessionDone(sessionDone, items)
   property string message: ""
   property double clockNow: Date.now()
   property var pendingPomodoroItem: null
@@ -56,7 +59,7 @@ Panel {
   readonly property var pomodoro: pomo.view
   readonly property int openCount: Model.openCount(items)
   readonly property string countLabel: Model.countLabel(items)
-  readonly property var listItems: Model.sortForList(Model.visibleItems(items, sessionDone), sessionDone)
+  readonly property var listItems: Model.sortForList(Model.visibleItems(items, liveSessionDone), liveSessionDone)
   readonly property var focusLineModel: Model.focusLine(items, focusModel, pomodoro)
   readonly property int firstRow: focusLineModel ? 1 : 0
   readonly property var rows: {
@@ -142,7 +145,7 @@ Panel {
   function reducerCtx() {
     return {
       rows: rows, steps: detailItem ? detailItem.plan.length : 0, backend: backend, focus: focusModel,
-      sessionDone: sessionDone, pomodoro: pomodoro, prefill: focusModel && focusModel.text ? focusModel.text : ""
+      sessionDone: liveSessionDone, pomodoro: pomodoro, prefill: focusModel && focusModel.text ? focusModel.text : ""
     }
   }
 
@@ -219,7 +222,7 @@ Panel {
   // Mouse twins of the keys (UX §4.6); each calls the same function.
   function rowKey(id, key) {
     var it = Model.findItem(items, id)
-    var action = KeyMap.keyAction("list", key, { item: it, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: sessionDone, pomodoro: pomodoro })
+    var action = KeyMap.keyAction("list", key, { item: it, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
     if (action) apply(action)
   }
   function tickRow(id) { rowKey(id, "d") }
@@ -232,13 +235,6 @@ Panel {
     sessionDone = next
   }
 
-  function dropSessionDone(id) {
-    if (sessionDone[String(id)] === undefined) return
-    var next = {}
-    for (var k in sessionDone) if (k !== String(id)) next[k] = sessionDone[k]
-    sessionDone = next
-  }
-
   // ---- operations: the IPC functions and the keys call these
   function addItem(name, description) {
     return store.add(name, description)
@@ -246,9 +242,7 @@ Panel {
 
   function deleteItem(id) {
     var reply = store.remove(id)
-    if (reply.indexOf("unavailable") === 0) return reply
-    dropSessionDone(id)
-    return "ok"
+    return reply.indexOf("unavailable") === 0 ? reply : "ok"
   }
 
   function setStatus(id, status) {
@@ -259,7 +253,7 @@ Panel {
     if (status === "done") {
       if (previous !== "done") markSessionDone(id, previous)
       if (pomodoro.phase !== "idle" && pomodoro.taskId === String(id)) showMessage(Model.MSG_DONE_ATTACHED)
-    } else dropSessionDone(id)
+    }
     return "ok"
   }
 
@@ -336,7 +330,7 @@ Panel {
   function dump() {
     return JSON.stringify(Model.dumpView({
       backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
-      items: items, focus: focusModel, sessionDone: sessionDone, banner: banner === "" ? null : banner,
+      items: items, focus: focusModel, sessionDone: liveSessionDone, banner: banner === "" ? null : banner,
       footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
     }))
   }

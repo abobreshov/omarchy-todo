@@ -39,8 +39,10 @@ function clampCursor(index, count) {
   return index
 }
 
-function isDoneRow(item, ctx) {
-  return !!item && (item.status === "done" || (ctx.sessionDone && ctx.sessionDone[item.id] !== undefined))
+// The status is the one source of truth for "done"; `sessionDone` only
+// drives ordering and visibility (Model.sortForList, Model.visibleItems).
+function isDoneRow(item) {
+  return !!item && item.status === "done"
 }
 
 function attachedTo(item, ctx) {
@@ -71,7 +73,7 @@ function keyAction(view, key, ctx) {
     return null
   }
   if (!item) return null
-  var done = isDoneRow(item, c)
+  var done = isDoneRow(item)
   switch (key) {
     case "d":
       return { type: "setStatus", id: item.id, status: done ? "todo" : "done" }

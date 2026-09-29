@@ -54,6 +54,16 @@ test("UI-4b: s / f / p are inert on a done row with the transient; d reopens; p 
   assert.deepEqual(Keys.keyAction("list", "p", ctxFor({ item: done, sessionDone: { 12: "doing" }, pomodoro: onTask("12") })), { type: "pausePomodoro" });
 });
 
+test("a row is done only by its status: a reverted or externally reopened row keeps its keys", () => {
+  // The write behind `d` failed and was reverted (or todocli reopened the
+  // task): the status is todo again although sessionDone still lists it.
+  const ctx = ctxFor({ item: item("3", "Wire", "todo"), sessionDone: { 3: "todo" } });
+  assert.deepEqual(Keys.keyAction("list", "s", ctx), { type: "setStatus", id: "3", status: "doing" });
+  assert.deepEqual(Keys.keyAction("list", "d", ctx), { type: "setStatus", id: "3", status: "done" });
+  assert.deepEqual(Keys.keyAction("list", "f", ctx), { type: "focus", id: "3" });
+  assert.deepEqual(Keys.keyAction("list", "p", ctx), { type: "startPomodoro", id: "3" });
+});
+
 test("p on the task the pomodoro is attached to pauses/resumes instead of starting", () => {
   assert.deepEqual(Keys.keyAction("list", "p", ctxFor({ item: item("3", "Wire", "doing"), pomodoro: onTask("3") })), { type: "pausePomodoro" });
   assert.deepEqual(Keys.keyAction("list", "p", ctxFor({ item: item("3", "Wire", "doing"), pomodoro: onTask("3", false) })), { type: "pausePomodoro" });

@@ -279,6 +279,14 @@ test("UI-14: a row ticked done this session keeps its pre-tick group position", 
   assert.deepEqual(Model.visibleItems(items, {}).map((i) => i.id), ["1", "3", "4"], "done rows hide when the panel reopens");
 });
 
+test("pruneSessionDone drops rows that are no longer done: reverted, reopened or removed", () => {
+  const items = [item("3", "three", "todo"), item("4", "four", "done"), item("5", "five", "done")];
+  assert.deepEqual(Model.pruneSessionDone({ 3: "todo", 4: "doing", 9: "todo" }, items), { 4: "doing" });
+  assert.deepEqual(Model.pruneSessionDone({ 5: "todo" }, items), { 5: "todo" });
+  assert.deepEqual(Model.pruneSessionDone(null, items), {});
+  assert.deepEqual(Model.pruneSessionDone({ 4: "doing" }, null), {});
+});
+
 test("focusTask, doingTask and openCount", () => {
   const items = [item("5", "five", "doing"), item("8", "eight", "doing"), item("9", "nine", "done"), item("1", "one", "todo")];
   assert.equal(Model.focusTask(items, { text: "", taskId: "8" }).id, "8");
