@@ -51,6 +51,18 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   a warning baseline, a fake `todocli` and `tests/smoke.sh`, a headless IPC
   smoke test in a scratch Quickshell instance.
 
+### Fixed
+
+- Hovering a row's `(o)` / `(t)` icons made them flicker: the icons were
+  made visible on the row's `MouseArea` hover, and a `MouseArea` of their
+  own takes that hover away (Qt 6), so each icon hid itself under the
+  pointer and reappeared a frame later; the row also grew by the icon's
+  height, which resized the popup. A `HoverHandler` now owns the row's hover
+  (it stays hovered over the icons and the checkbox), the cluster keeps two
+  fixed slots that the icons only fade into (`View.rowActions`), the focus
+  line's `(t)` / `{x}` do the same (`focusLine().actions`), and a row that
+  already holds the cursor dispatches no further hover.
+
 ### Notes
 
 - Size: about 3,500 lines of QML and JS against the 1,800 the plan

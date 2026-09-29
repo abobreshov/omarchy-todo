@@ -239,31 +239,66 @@ function helpLine(view, backend) {
   return "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
 }
 
+// ---------------------------------------------------------------- row cluster
+
+// UX §4.2 row anatomy, the right cluster: the plan progress, then one slot
+// for the focus mark or its ghost and one for the pomodoro mark or its
+// ghost; the armed delete (x once) replaces the cluster with its caption.
+// Each slot is always laid out and a ghost only fades in (opacity) while the
+// row is hovered: a control made visible under the pointer takes the hover
+// from the row, which hides it again, and the icons flicker (the hover
+// glitch); a hidden control that keeps its space cannot.
+function rowActions(item, ctx) {
+  var c = ctx || {}
+  var it = item || { id: "", status: "todo" }
+  var armed = c.armed === true
+  var isDone = it.status === "done"
+  var isFocus = Model.isFocused(c.focus, it.id)
+  var attached = Model.isAttached(c.pomodoro, it.id)
+  return {
+    armed: armed,
+    caption: armed ? "x again to delete" : "",
+    progress: armed ? "" : Model.planProgress(it),
+    focus: { mark: !armed && isFocus, ghost: !armed && !isFocus && !isDone, tooltip: "Set focus (f)" },
+    pomodoro: {
+      mark: !armed && attached,
+      running: attached && c.pomodoro.running === true,
+      ghost: !armed && !attached && !isDone,
+      tooltip: "Start pomodoro (p)"
+    }
+  }
+}
+
 // ---------------------------------------------------------------- focus line
 
-// UX §4.2 focus line variants F0–F6.
+// UX §4.2 focus line variants F0–F6. `actions` says which ghost buttons the
+// line lays out (they fade in on hover, as the row ghosts): `pomodoro` = the
+// (t) of F1 and F5, `clear` = the {x} of every line with a focus.
 function focusLine(items, focus, pomodoro) {
   var pom = pomodoro || Model.idleView()
   var f = focus || { text: "", taskId: null }
   var task = Model.focusTask(items, f)
-  var base = { variant: null, text: "", selectable: true, item: null, timer: "", timerGlyph: "", timerDim: false, hint: "", tooltip: "" }
+  var base = { variant: null, text: "", selectable: true, item: null, timer: "", timerGlyph: "", timerDim: false, hint: "", tooltip: "", actions: { pomodoro: false, clear: false } }
   if (task) {
     base.item = task
     base.text = task.name
+    base.actions.clear = true
     var attached = Model.isAttached(pom, task.id)
     if (attached && pom.phase === "work" && pom.running) { base.variant = "F2"; base.timer = Model.formatTime(pom.remaining); base.timerGlyph = Model.G.pomodoro }
     else if (attached && pom.phase === "work") { base.variant = "F3"; base.timer = Model.formatTime(pom.remaining) + " paused"; base.timerGlyph = Model.G.pomodoro; base.timerDim = true }
     else if (attached) { base.variant = "F4"; base.timer = Model.formatTime(pom.remaining); base.timerGlyph = Model.G.brk; base.timerDim = true }
     else if (pom.phase === "work" && pom.taskId !== "") {
       base.variant = "F5"
+      base.actions.pomodoro = true
       var other = Model.findItem(items, pom.taskId)
       base.hint = Model.G.pomodoro + " " + Model.formatTime(pom.remaining) + " on " + (other ? other.name : pom.label) + " · p moves it here"
-    } else base.variant = "F1"
+    } else { base.variant = "F1"; base.actions.pomodoro = true }
     return base
   }
   if (f.text) {
     base.variant = "F6"
     base.text = f.text
+    base.actions.clear = true
     base.tooltip = "Focus set outside the list. Enter makes it a task."
     return base
   }

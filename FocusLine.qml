@@ -7,7 +7,9 @@ import "Model.js" as Model
 // The focus line between the header and the list (UX §4.2, variants F0–F6):
 // cursor row 0 when a focus exists, the pomodoro timer while one runs on
 // the focus task, a hint when it runs elsewhere, and a ghost (t) / {x} on
-// hover.
+// hover. As in TaskRow, a HoverHandler owns the hover (a ghost's own
+// MouseArea takes it from the MouseArea beneath) and the ghosts the
+// variant lays out (`model.actions`) keep their space and only fade in.
 Item {
   id: line
 
@@ -17,23 +19,25 @@ Item {
   readonly property bool selectable: shown && model.selectable
   readonly property bool current: selectable && panel.ui.cursor === 0
   readonly property bool hasFocus: shown && model.variant !== "F0"
-  readonly property bool hovered: area.containsMouse
+  readonly property bool hovered: hoverHandler.hovered
   readonly property color fg: panel.contentForeground
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
   readonly property bool timerShown: shown && model.timer !== ""
-  // F1 and F5 (F1 plus the hint line) carry the ghost (t); the timer
-  // variants show the timer instead and F0/F6 have no task to start on.
-  readonly property bool ghostShown: shown && hovered && !timerShown && hasFocus && model.item !== null
+  readonly property bool ghostPomodoro: shown && model.actions.pomodoro
+  readonly property bool ghostClear: shown && model.actions.clear
 
   component Ghost: PanelActionButton {
     anchors.verticalCenter: parent.verticalCenter
     size: Style.space(24)
+    opacity: line.hovered ? 1 : 0
+    enabled: line.hovered && !line.panel.errored
     foreground: line.dim
     hoverColor: Color.accent
     fontFamily: line.family
     fontSize: Style.font.caption
-    enabled: !line.panel.errored
+
+    Behavior on opacity { NumberAnimation { duration: 80 } }
   }
 
   component Caption: Text {
@@ -53,14 +57,19 @@ Item {
     color: line.current ? Style.hoverFillFor(line.fg, Color.accent) : "transparent"
   }
 
+  HoverHandler {
+    id: hoverHandler
+    onHoveredChanged: if (hovered && line.selectable && !line.current) line.panel.hoverRow(0)
+  }
+
   MouseArea {
     id: area
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: line.selectable ? Qt.PointingHandCursor : Qt.ArrowCursor
-    onContainsMouseChanged: if (containsMouse && line.selectable) line.panel.hoverRow(0)
     onClicked: if (line.selectable) line.panel.activateFocusLine()
 
+    // F6's tooltip; it yields to a ghost's own tooltip, which takes the hover.
     PanelToolTip {
       visible: line.shown && line.model.tooltip !== "" && area.containsMouse
       text: line.shown ? line.model.tooltip : ""
@@ -117,14 +126,14 @@ Item {
         }
 
         Ghost {
-          visible: line.ghostShown
+          visible: line.ghostPomodoro
           iconText: Model.G.pomodoro
           tooltipText: "Start pomodoro (p)"
           onClicked: line.panel.startPomodoro("focus")
         }
 
         Ghost {
-          visible: line.hasFocus && line.hovered
+          visible: line.ghostClear
           iconText: Model.G.close
           tooltipText: "Clear focus (f)"
           hoverColor: Color.urgent

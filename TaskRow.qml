@@ -3,10 +3,19 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "View.js" as View
 
 // One list row (UX §4.2): status glyph · title · plan n/m · (o) · (t). The
 // status glyph is the click target upstream's checkbox was; it now marks
 // done rather than deleting. Mouse and keyboard share one cursor.
+//
+// Hover is owned by a HoverHandler on the row, not by the row's MouseArea:
+// a child MouseArea (the checkbox, a ghost button) takes the hover from the
+// MouseArea beneath it, and a ghost that showed itself on that MouseArea's
+// hover hid itself the moment the pointer reached it (the hover glitch).
+// The handler stays hovered over its children. The right cluster keeps its
+// geometry on hover too (View.rowActions: fixed slots, ghosts fade in), so
+// nothing under the pointer moves or re-elides.
 Item {
   id: row
 
@@ -17,34 +26,54 @@ Item {
   readonly property bool current: panel.ui.cursor === rowIndex
   readonly property bool armed: panel.ui.armedId === modelData.id
   readonly property bool isDone: modelData.status === "done"
-  readonly property bool isFocus: Model.isFocused(panel.focusModel, modelData.id)
-  readonly property bool attached: Model.isAttached(panel.pomodoro, modelData.id)
-  readonly property string progress: Model.planProgress(modelData)
+  readonly property var actions: View.rowActions(modelData, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
   readonly property color fg: panel.contentForeground
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
+  readonly property int slotSize: Style.space(24)
   property bool checkHovered: false
-  readonly property bool rowHovered: rowHover.containsMouse
+  readonly property bool rowHovered: rowHoverHandler.hovered
 
   // The right cluster's marks and ghost buttons share one look.
   component Mark: Text {
-    anchors.verticalCenter: parent.verticalCenter
     color: row.dim
     font.family: row.family
     font.pixelSize: Style.font.caption
   }
 
-  component Ghost: PanelActionButton {
+  // One fixed slot of the cluster: the state mark, or the ghost button that
+  // fades in while the row is hovered and is live only then.
+  component Slot: Item {
+    id: slot
+    required property var spec
+    required property string glyph
+    required property string key
+    property color markColor: row.dim
+    width: row.slotSize
+    height: row.slotSize
     anchors.verticalCenter: parent.verticalCenter
-    size: Style.space(24)
-    foreground: row.dim
-    hoverColor: Color.accent
-    fontFamily: row.family
-    fontSize: Style.font.caption
-    enabled: !row.panel.errored
+
+    Mark { anchors.centerIn: parent; visible: slot.spec.mark; text: slot.glyph; color: slot.markColor }
+
+    PanelActionButton {
+      anchors.centerIn: parent
+      size: row.slotSize
+      visible: !slot.spec.mark
+      opacity: slot.spec.ghost && row.rowHovered ? 1 : 0
+      enabled: slot.spec.ghost && row.rowHovered && !row.panel.errored
+      iconText: slot.glyph
+      tooltipText: slot.spec.tooltip
+      foreground: row.dim
+      hoverColor: Color.accent
+      fontFamily: row.family
+      fontSize: Style.font.caption
+      onClicked: row.panel.rowKey(row.modelData.id, slot.key)
+
+      Behavior on opacity { NumberAnimation { duration: 80 } }
+    }
   }
 
-  height: Math.max(rowCheck.implicitHeight, rowTitle.implicitHeight, cluster.implicitHeight) + Style.spacing.lg
+  height: Math.max(rowCheck.implicitHeight, rowTitle.implicitHeight, slotSize) + Style.spacing.lg
 
   Rectangle {
     anchors.fill: parent
@@ -54,14 +83,18 @@ Item {
       : (row.current ? Style.hoverFillFor(row.fg, Color.accent) : "transparent")
   }
 
+  // The cursor follows the pointer once per row entered; a row already
+  // under the cursor dispatches nothing.
+  HoverHandler {
+    id: rowHoverHandler
+    onHoveredChanged: if (hovered && !row.current) row.panel.hoverRow(row.rowIndex)
+  }
+
   // Declared before the checkbox so the checkbox's own handler sits on top
   // and clicking the box ticks rather than opens.
   MouseArea {
-    id: rowHover
     anchors.fill: parent
-    hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onContainsMouseChanged: if (containsMouse) row.panel.hoverRow(row.rowIndex)
     onClicked: row.panel.openDetail(row.modelData.id)
   }
 
@@ -107,8 +140,8 @@ Item {
     font.pixelSize: Style.font.body
   }
 
-  // Right cluster: plan progress, focus and pomodoro marks; ghost buttons on
-  // hover; the armed-delete caption replaces it all.
+  // Right cluster: plan progress, then the focus and pomodoro slots; the
+  // armed-delete caption replaces it all.
   Row {
     id: cluster
     anchors.right: parent.right
@@ -116,23 +149,23 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.spacing.sm
 
-    Mark { visible: row.armed; text: "x again to delete"; color: Color.urgent }
-    Mark { visible: !row.armed && row.progress !== ""; text: row.progress }
-    Mark { visible: !row.armed && row.isFocus; text: Model.G.focus; color: Color.accent }
-    Mark { visible: !row.armed && row.attached; text: Model.G.pomodoro; color: row.panel.pomodoro.running ? Color.accent : row.dim }
+    Mark { anchors.verticalCenter: parent.verticalCenter; visible: row.actions.armed; text: row.actions.caption; color: Color.urgent }
+    Mark { anchors.verticalCenter: parent.verticalCenter; visible: row.actions.progress !== ""; text: row.actions.progress }
 
-    Ghost {
-      visible: !row.armed && row.rowHovered && !row.isFocus && !row.isDone
-      iconText: Model.G.focus
-      tooltipText: "Set focus (f)"
-      onClicked: row.panel.rowKey(row.modelData.id, "f")
+    Slot {
+      visible: !row.actions.armed
+      spec: row.actions.focus
+      glyph: Model.G.focus
+      key: "f"
+      markColor: Color.accent
     }
 
-    Ghost {
-      visible: !row.armed && row.rowHovered && !row.attached && !row.isDone
-      iconText: Model.G.pomodoro
-      tooltipText: "Start pomodoro (p)"
-      onClicked: row.panel.rowKey(row.modelData.id, "p")
+    Slot {
+      visible: !row.actions.armed
+      spec: row.actions.pomodoro
+      glyph: Model.G.pomodoro
+      key: "p"
+      markColor: row.actions.pomodoro.running ? Color.accent : row.dim
     }
   }
 }

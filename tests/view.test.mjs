@@ -190,7 +190,7 @@ test("transient message copy (UX §4.5, §7) and the empty-state and help lines"
 // ------------------------------------------------------------- focus line
 test("focusLine renders the UX §4.2 variants F0–F6", () => {
   const items = [item("12", "Write UX spec for the panels", "doing"), item("15", "Review PR !412", "doing"), item("2", "Book", "todo")];
-  assert.deepEqual(View.focusLine(items, { text: "", taskId: null }, idle), { variant: "F0", text: "No focus · f on a task sets it", selectable: false, item: null, timer: "", timerGlyph: "", timerDim: false, hint: "", tooltip: "" });
+  assert.deepEqual(View.focusLine(items, { text: "", taskId: null }, idle), { variant: "F0", text: "No focus · f on a task sets it", selectable: false, item: null, timer: "", timerGlyph: "", timerDim: false, hint: "", tooltip: "", actions: { pomodoro: false, clear: false } });
   assert.equal(View.focusLine([], { text: "", taskId: null }, idle), null);
   assert.equal(View.focusLine([item("1", "a", "done")], { text: "", taskId: null }, idle).variant, "F0");
   const f1 = View.focusLine(items, { text: "", taskId: "12" }, idle);
@@ -225,6 +225,43 @@ test("focusLine renders the UX §4.2 variants F0–F6", () => {
   assert.equal(View.focusLine(items, { text: "Ship", taskId: "99" }, idle).variant, "F6", "a dangling link with text is a free-text focus");
   assert.equal(View.focusLine(items, { text: "", taskId: "99" }, idle).variant, "F0");
   assert.equal(View.focusLine(items, null, idle).variant, "F0", "no focus object reads as no focus");
+  // The ghost buttons each variant lays out: (t) on F1 and F5 only, {x} on every line with a focus.
+  assert.deepEqual(f1.actions, { pomodoro: true, clear: true });
+  assert.deepEqual(f2.actions, { pomodoro: false, clear: true });
+  assert.deepEqual(f3.actions, { pomodoro: false, clear: true });
+  assert.deepEqual(f4.actions, { pomodoro: false, clear: true });
+  assert.deepEqual(f5.actions, { pomodoro: true, clear: true });
+  assert.deepEqual(f6.actions, { pomodoro: false, clear: true }, "a free-text focus has no task to start on");
+});
+
+// ------------------------------------------------------------- row cluster
+test("rowActions: one slot each for the focus and pomodoro mark or ghost; the armed caption replaces the cluster (UX §4.2)", () => {
+  const plain = item("1", "one", "todo");
+  const planned = item("2", "two", "doing", { plan: [{ text: "a", done: true }, { text: "b", done: false }] });
+  const done = item("3", "three", "done");
+  const focus = { text: "one", taskId: "1" };
+  const shape = (a) => ({ f: a.focus.mark + "/" + a.focus.ghost, p: a.pomodoro.mark + "/" + a.pomodoro.ghost });
+  assert.deepEqual(View.rowActions(plain, { focus: null, pomodoro: idle }), {
+    armed: false, caption: "", progress: "",
+    focus: { mark: false, ghost: true, tooltip: "Set focus (f)" },
+    pomodoro: { mark: false, running: false, ghost: true, tooltip: "Start pomodoro (p)" }
+  });
+  assert.deepEqual(shape(View.rowActions(plain, { focus, pomodoro: idle })), { f: "true/false", p: "false/true" }, "the focus task carries the mark, not the ghost");
+  const onOne = View.rowActions(plain, { focus, pomodoro: onTask("1") });
+  assert.deepEqual(shape(onOne), { f: "true/false", p: "true/false" }, "the attached task carries the pomodoro mark");
+  assert.equal(onOne.pomodoro.running, true);
+  assert.equal(View.rowActions(plain, { focus, pomodoro: onTask("1", { running: false }) }).pomodoro.running, false, "dim while paused");
+  assert.deepEqual(shape(View.rowActions(planned, { focus, pomodoro: onTask("1") })), { f: "false/true", p: "false/true" }, "another row keeps both ghosts");
+  assert.equal(View.rowActions(planned, { focus, pomodoro: idle }).progress, "1/2");
+  assert.deepEqual(shape(View.rowActions(done, { focus: null, pomodoro: idle })), { f: "false/false", p: "false/false" }, "a done row has no ghosts (s, f, p are inert)");
+  assert.deepEqual(shape(View.rowActions(done, { focus: null, pomodoro: onTask("3") })), { f: "false/false", p: "true/false" }, "but keeps the mark of the pomodoro still attached to it");
+  const armed = View.rowActions(planned, { focus: { text: "two", taskId: "2" }, pomodoro: onTask("2"), armed: true });
+  assert.deepEqual(armed, {
+    armed: true, caption: "x again to delete", progress: "",
+    focus: { mark: false, ghost: false, tooltip: "Set focus (f)" },
+    pomodoro: { mark: false, running: true, ghost: false, tooltip: "Start pomodoro (p)" }
+  }, "armed: the caption alone");
+  assert.deepEqual(shape(View.rowActions(null, null)), { f: "false/true", p: "false/true" }, "total on missing input");
 });
 
 // ------------------------------------------------------------- detail
