@@ -3,6 +3,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "View.js" as View
 
 // Read-only detail view (UX §4.4): back + title, the status line, the
 // description, the plan (steps tick with Enter/Space/click), the notes and
@@ -18,8 +19,8 @@ Column {
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
   readonly property bool armed: hasItem && panel.ui.armedId === item.id
-  readonly property var tips: Model.actionTooltips(item, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
-  readonly property string statusText: hasItem ? Model.statusLine(item, { backend: panel.backend, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
+  readonly property var tips: View.actionTooltips(item, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
+  readonly property string statusText: hasItem ? View.statusLine(item, { backend: panel.backend, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
 
   component Body: Text {
     width: parent.width
@@ -241,7 +242,7 @@ Column {
   Caption {
     visible: view.panel.ui.help
     width: parent.width
-    text: Model.helpLine("detail", view.panel.backend)
+    text: View.helpLine("detail", view.panel.backend)
     wrapMode: Text.WordWrap
     elide: Text.ElideNone
   }

@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Model.js" as Model
+import "Store.js" as Store
 import "Argv.js" as Argv
 
 // The json backend: upstream's FileView + atomicWrites + guarded-before-write
@@ -24,9 +24,9 @@ TodoStore {
   property bool triedUpstream: false
 
   function applyLoaded(raw) {
-    var doc = Model.parseDocument(raw)
+    var doc = Store.parseDocument(raw)
     if (!doc.ok) {
-      banner = Model.MSG_UNREADABLE
+      banner = Store.MSG_UNREADABLE
       blocked = true
       loaded = true
       return
@@ -35,7 +35,7 @@ TodoStore {
     blocked = false
     // Skip no-op updates so this instance's own write (and the directory
     // reload it provokes) does not churn the views on every save.
-    if (loaded && Model.serializeDocument(doc) === Model.serializeDocument({ focus: focus, todos: items })) return
+    if (loaded && Store.serializeDocument(doc) === Store.serializeDocument({ focus: focus, todos: items })) return
     items = doc.todos
     focus = doc.focus
     loaded = true
@@ -56,7 +56,7 @@ TodoStore {
 
   function applyUpstream(raw) {
     if (loaded) return
-    var doc = Model.parseDocument(raw)
+    var doc = Store.parseDocument(raw)
     items = doc.ok ? doc.todos : []
     focus = doc.ok ? doc.focus : { text: "", taskId: null }
     loaded = true
@@ -69,7 +69,7 @@ TodoStore {
     // construction and the file landing would clobber the list we are
     // about to restore.
     if (!loaded || blocked) return
-    saveFile.setText(Model.serializeDocument({ focus: focus, todos: items }))
+    saveFile.setText(Store.serializeDocument({ focus: focus, todos: items }))
   }
 
   function scheduleSave() { saveTimer.restart() }
@@ -86,7 +86,7 @@ TodoStore {
   // ---- mutations (synchronous; replies are final, as upstream). `done`
   //      runs one turn later so both stores call it after the reply.
   function perform(action, done) {
-    var r = Model.reduce({ items: items, focus: focus }, action)
+    var r = Store.reduce({ items: items, focus: focus }, action)
     if (!r.ok) return r.reply
     items = r.doc.items
     focus = r.doc.focus
@@ -98,8 +98,8 @@ TodoStore {
   // `R` / IPC syncNow in json mode: the transient of UX §4.5, through the
   // same signal the cli store answers with.
   function syncNow() {
-    syncFinished({ ok: false, message: Model.MSG_SYNC_NEEDS_CLI })
-    return Model.MSG_SYNC_NEEDS_CLI
+    syncFinished({ ok: false, message: Store.MSG_SYNC_NEEDS_CLI })
+    return Store.MSG_SYNC_NEEDS_CLI
   }
 
   // ---- persistence objects

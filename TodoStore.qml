@@ -3,7 +3,7 @@ import QtQuick
 // The store interface (PLAN §6.4, Strategy): JsonStore and CliStore extend
 // this and answer identically, so Panel.qml binds to `store` alone and never
 // asks which backend it is. Replies follow UX §10.3 and §7 ("accepted, not
-// committed"); `perform(action, done)` applies one Model.js action and calls
+// committed"); `perform(action, done)` applies one Store.js action and calls
 // `done(null | {kind, message})` later, only when the action was accepted
 // (cli: after the write; json: one event-loop turn later).
 QtObject {

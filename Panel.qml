@@ -5,6 +5,9 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Errors.js" as Errors
+import "View.js" as View
+import "Pomodoro.js" as Pomodoro
 import "Keys.js" as KeyMap
 
 // The todo panel: the composition root. The BarWidget.qml entry point owns
@@ -12,7 +15,7 @@ import "Keys.js" as KeyMap
 // (`backend === "cli" ? cliStore : jsonStore`, PLAN §6.4), runs the view
 // machine through KeyMap.reduceUi, applies the actions it returns to the
 // store, and hosts the views (list, compose, detail, error). All logic lives
-// in Model.js / Keys.js / Argv.js; this file binds and forwards.
+// in the .js libraries; this file binds and forwards.
 Panel {
   id: root
 
@@ -50,33 +53,33 @@ Panel {
   // the pruned map is read, so a reverted write or an external reopen drops
   // the row from it at once (UX §4.5 done-row rule; PLAN A34b).
   property var sessionDone: ({})
-  readonly property var liveSessionDone: Model.pruneSessionDone(sessionDone, items)
+  readonly property var liveSessionDone: View.pruneSessionDone(sessionDone, items)
   property string message: ""
   property double clockNow: Date.now()
 
   readonly property var items: store.items
   readonly property var focusModel: store.focus
   readonly property var pomodoro: pomo.view
-  readonly property int openCount: Model.openCount(items)
-  readonly property string countLabel: Model.countLabel(items)
-  readonly property var listItems: Model.sortForList(Model.visibleItems(items, liveSessionDone), liveSessionDone)
-  readonly property var focusLineModel: Model.focusLine(items, focusModel, pomodoro)
+  readonly property int openCount: View.openCount(items)
+  readonly property string countLabel: View.countLabel(items)
+  readonly property var listItems: View.sortForList(View.visibleItems(items, liveSessionDone), liveSessionDone)
+  readonly property var focusLineModel: View.focusLine(items, focusModel, pomodoro)
   readonly property int firstRow: focusLineModel ? 1 : 0
-  readonly property var rows: Model.listRows(focusLineModel, listItems)
+  readonly property var rows: View.listRows(focusLineModel, listItems)
   readonly property var detailItem: Model.findItem(items, ui.selectedId)
-  readonly property var pill: Model.pillState({
+  readonly property var pill: View.pillState({
     backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
     sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
   })
-  readonly property var footerModel: store.hasSync ? Model.footer(store.sync, clockNow, { syncing: store.syncing }) : null
-  readonly property var errorModel: Model.errorView(store.error, { cliPath: cliPath, moduleName: moduleName })
+  readonly property var footerModel: store.hasSync ? View.footer(store.sync, clockNow, { syncing: store.syncing }) : null
+  readonly property var errorModel: Errors.errorView(store.error, { cliPath: cliPath, moduleName: moduleName })
   readonly property string banner: store.banner
   readonly property bool errored: store.error !== null
   // E3: the empty-state copy waits for the first read; `Loading…` shows
   // instead, and only once the first read has taken 300 ms.
   readonly property bool loading: !store.loaded && store.error === null
   property bool loadingShown: false
-  readonly property string emptyCopy: loading ? (loadingShown ? "Loading\u2026" : "") : (store.loaded ? (Model.emptyCopy(items) || "") : "")
+  readonly property string emptyCopy: loading ? (loadingShown ? "Loading\u2026" : "") : (store.loaded ? (View.emptyCopy(items) || "") : "")
   onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
   // Change handlers below write `ui`; during construction the first
@@ -216,7 +219,7 @@ Panel {
   // Every mutation goes through the store's perform; ticking a row done
   // remembers its pre-tick position first (UI-14).
   function perform(action) {
-    var tick = Model.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
+    var tick = View.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
     var reply = store.perform(action, null)
     if (tick && reply === "ok") {
       sessionDone = tick.sessionDone
@@ -229,7 +232,7 @@ Panel {
     var it = Model.findItem(items, id)
     root.open()
     if (!it) {
-      var text = Model.msgTaskNotFound(id)
+      var text = View.msgTaskNotFound(id)
       showMessage(text)
       return text
     }
@@ -248,7 +251,7 @@ Panel {
   // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): Model decides,
   // this executes; `startFor` runs only after the focus write exits 0.
   function startPomodoro(id) {
-    var intent = Model.pomodoroIntent({ items: items, focus: focusModel, pomodoro: pomodoro, error: store.error, backend: backend }, id)
+    var intent = Pomodoro.pomodoroIntent({ items: items, focus: focusModel, pomodoro: pomodoro, error: store.error, backend: backend }, id)
     switch (intent.kind) {
       case "pause": pomo.pause(); break
       case "startLabel": pomo.startFor(null, intent.label); break
@@ -266,7 +269,7 @@ Panel {
   }
 
   function dump() {
-    return JSON.stringify(Model.dumpView({
+    return JSON.stringify(View.dumpView({
       backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
       items: items, focus: focusModel, sessionDone: liveSessionDone, banner: banner === "" ? null : banner,
       footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
@@ -291,14 +294,14 @@ Panel {
     target: root.pomodoroTarget
     opened: root.opened
     onResult: function(r, item) {
-      var text = Model.pomodoroMessage(r, item, { remaining: root.pomodoro.remaining, backend: root.backend, target: root.pomodoroTarget })
+      var text = Pomodoro.pomodoroMessage(r, item, { remaining: root.pomodoro.remaining, backend: root.backend, target: root.pomodoroTarget })
       if (text !== "") root.showMessage(text)
     }
   }
 
   Connections {
     target: root.store
-    function onFailed(error) { root.showMessage(Model.msgNotSaved(error)) }
+    function onFailed(error) { root.showMessage(Errors.msgNotSaved(error)) }
     function onSyncFinished(result) { if (!result.ok && result.message) root.showMessage(result.message) }
   }
 
@@ -489,7 +492,7 @@ Panel {
               Text {
                 visible: root.ui.help
                 width: parent.width
-                text: Model.helpLine("list", root.backend)
+                text: View.helpLine("list", root.backend)
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
                 color: root.dimForeground

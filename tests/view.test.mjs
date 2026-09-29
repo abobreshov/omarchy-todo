@@ -1,0 +1,292 @@
+// View.js under node --test (PLAN §9.4, A28; fixtures from UX §3.1, §4.2,
+// §4.4, §4.5, §4.7, §10.3 and PLAN A19, A34b): the list's order and the
+// session's done rows (UI-14), the pill (UI-11), the footer (UI-12), the
+// focus line (F0–F6), the detail view's status line and tooltips, the
+// transients and the IPC `dump()` view.
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { lib, G, NOW, item, idle, onTask, target } from "./helpers.mjs";
+
+const View = lib("View.js");
+
+// ------------------------------------------------------------- session
+test("tickDone remembers an open row's pre-tick status and warns when the pomodoro sits on it (UI-14, UX §6.4)", () => {
+  const items = [item("1", "A", "doing"), item("2", "B", "todo"), item("3", "C", "done")];
+  const onOne = onTask("1", { remaining: 9, label: "A" });
+  assert.deepEqual(View.tickDone({ items, sessionDone: { 7: "todo" }, pomodoro: idle }, { type: "setStatus", id: 2, status: "done" }), { sessionDone: { 7: "todo", 2: "todo" }, message: "" });
+  assert.deepEqual(View.tickDone({ items, sessionDone: {}, pomodoro: onOne }, { type: "setStatus", id: "1", status: "done" }), { sessionDone: { 1: "doing" }, message: View.MSG_DONE_ATTACHED });
+  assert.equal(View.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "3", status: "done" }), null, "already done");
+  assert.equal(View.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "9", status: "done" }), null, "unknown id");
+  assert.equal(View.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "1", status: "todo" }), null, "not a tick");
+  assert.equal(View.tickDone({ items }, { type: "remove", id: "1" }), null);
+  assert.equal(View.tickDone({ items }, null), null);
+  assert.equal(View.MSG_DONE_ATTACHED, "Done. p on the next task moves the pomodoro.");
+});
+
+test("pruneSessionDone drops rows that are no longer done: reverted, reopened or removed", () => {
+  const items = [item("3", "three", "todo"), item("4", "four", "done"), item("5", "five", "done")];
+  assert.deepEqual(View.pruneSessionDone({ 3: "todo", 4: "doing", 9: "todo" }, items), { 4: "doing" });
+  assert.deepEqual(View.pruneSessionDone({ 5: "todo" }, items), { 5: "todo" });
+  assert.deepEqual(View.pruneSessionDone(null, items), {});
+  assert.deepEqual(View.pruneSessionDone({ 4: "doing" }, null), {});
+});
+
+// ------------------------------------------------------------- ordering
+test("sortForList: doing, todo, done; ids numeric in cli mode, insertion order in json mode", () => {
+  const items = [item("10", "ten", "todo"), item("2", "two", "doing"), item("3", "three", "done"), item("1", "one", "todo"), item("7", "seven", "doing")];
+  assert.deepEqual(View.sortForList(items, {}).map((i) => i.id), ["2", "7", "1", "10", "3"]);
+  const json = [item("tb", "b", "todo"), item("ta", "a", "doing"), item("tc", "c", "todo")];
+  assert.deepEqual(View.sortForList(json, {}).map((i) => i.id), ["ta", "tb", "tc"]);
+  assert.deepEqual(View.sortForList(null, {}), []);
+  assert.deepEqual(View.sortForList([null, item("1", "one", "todo")], null).map((i) => i.id), ["1"], "holes are skipped");
+});
+
+test("UI-14: a row ticked done this session keeps its pre-tick group position", () => {
+  const items = [item("1", "one", "doing"), item("2", "two", "done"), item("3", "three", "todo"), item("4", "four", "todo")];
+  // #2 was doing before the tick, #4 was todo before the tick.
+  const sessionDone = { 2: "doing", 4: "todo" };
+  assert.deepEqual(View.sortForList(items, sessionDone).map((i) => i.id), ["1", "2", "3", "4"]);
+  assert.deepEqual(View.visibleItems(items, sessionDone).map((i) => i.id), ["1", "2", "3", "4"]);
+  assert.deepEqual(View.visibleItems(items, {}).map((i) => i.id), ["1", "3", "4"], "done rows hide when the panel reopens");
+  assert.deepEqual(View.visibleItems(null, null), []);
+});
+
+test("doingTask, openCount and countLabel", () => {
+  const items = [item("5", "five", "doing"), item("8", "eight", "doing"), item("9", "nine", "done"), item("1", "one", "todo")];
+  assert.equal(View.doingTask(items, { text: "", taskId: "8" }).id, "8", "the focused task wins when it is doing");
+  assert.equal(View.doingTask(items, { text: "", taskId: null }).id, "5", "else the lowest doing id (AC-5.9)");
+  assert.equal(View.doingTask([item("b", "b", "doing"), item("a", "a", "doing")], null).id, "b", "json ids: first in insertion order");
+  assert.equal(View.doingTask([item("1", "x", "todo")], null), null);
+  assert.equal(View.openCount(items), 3);
+  assert.equal(View.countLabel(items), "3 open");
+  assert.equal(View.countLabel([]), "0 open");
+});
+
+test("listRows puts the focus line first, then the sorted items (UX §4.2)", () => {
+  const f1 = { variant: "F1", item: item("12", "W", "doing"), selectable: true };
+  assert.deepEqual(View.listRows(f1, [item("3", "B", "todo")]), [{ kind: "focus", item: f1.item, selectable: true }, { kind: "item", item: item("3", "B", "todo"), selectable: true }]);
+  assert.deepEqual(View.listRows({ variant: "F0", item: null, selectable: false }, []), [{ kind: "focus", item: null, selectable: false }]);
+  assert.deepEqual(View.listRows(null, [item("3", "B", "todo")]), [{ kind: "item", item: item("3", "B", "todo"), selectable: true }]);
+  assert.deepEqual(View.listRows(null, null), []);
+});
+
+// ------------------------------------------------------------- pill
+function pillInput(over) {
+  return Object.assign({ backend: "json", loaded: true, error: null, items: [], focus: { text: "", taskId: null }, sync: [], vertical: false, maxChars: 24, now: NOW }, over);
+}
+
+test("UI-11 pillState: the UX §3.1 table, rows 1–6", () => {
+  // 1 loading
+  assert.deepEqual(View.pillState(pillInput({ backend: "cli", loaded: false })), { glyph: G.icon, label: "", tooltip: "Checklist Todo\nLoading…", urgent: false, dimmed: true });
+  // 2 backend error, every kind
+  for (const [kind, short] of [["missing", "todocli not found"], ["busy", "Database busy or locked"], ["failed", "todocli error"], ["protocol", "Can't read todocli output"]]) {
+    assert.deepEqual(View.pillState(pillInput({ backend: "cli", error: { kind, message: "m" }, items: [item("1", "x", "doing")] })), { glyph: G.icon, label: "", tooltip: "Checklist Todo\n" + short + ". Click for details.", urgent: true, dimmed: false });
+  }
+  // 3 doing: focused doing task wins; +N more; focus text differs; count
+  const items = [item("5", "Review PR", "doing"), item("8", "Write UX spec for the panels", "doing"), item("1", "Book dentist", "todo")];
+  assert.deepEqual(View.pillState(pillInput({ items, focus: { text: "Ship the invoice-export slice", taskId: "8" } })), { glyph: G.doing, label: "Write UX spec for the…", tooltip: "Doing: Write UX spec for the panels (+1 more)\nFocus: Ship the invoice-export slice\n3 todos", urgent: false, dimmed: false });
+  // AC-5.9: lowest doing id when none is focused
+  const s9 = View.pillState(pillInput({ items, focus: { text: "Invoice slice", taskId: null } }));
+  assert.equal(s9.label, "Review PR");
+  assert.ok(s9.tooltip.includes("Focus: Invoice slice"));
+  // focus text equal to the title is not repeated
+  assert.equal(View.pillState(pillInput({ items: [item("5", "Review PR", "doing")], focus: { text: "Review PR", taskId: "5" } })).tooltip, "Doing: Review PR\n1 todo");
+  // 4 focus text, no doing
+  assert.deepEqual(View.pillState(pillInput({ items: [item("1", "Book dentist", "todo"), item("2", "Old", "done")], focus: { text: "Ship the invoice-export slice", taskId: null } })), { glyph: G.focus, label: "Ship the invoice-export…", tooltip: "Focus: Ship the invoice-export slice\n1 todo", urgent: false, dimmed: false });
+  // AC-5.5: focused task done -> focus text shows
+  assert.equal(View.pillState(pillInput({ items: [item("3", "Wire", "done")], focus: { text: "Invoice slice", taskId: "3" } })).label, "Invoice slice");
+  // 5 open count
+  assert.deepEqual(View.pillState(pillInput({ items: [item("1", "a", "todo"), item("2", "b", "todo"), item("3", "c", "todo")] })), { glyph: G.icon, label: "3", tooltip: "3 todos\nNo focus set", urgent: false, dimmed: false });
+  assert.equal(View.pillState(pillInput({ items: [item("1", "a", "todo")] })).tooltip, "1 todo\nNo focus set");
+  // 6 empty
+  assert.deepEqual(View.pillState(pillInput({ items: [item("2", "b", "done")] })), { glyph: G.icon, label: "", tooltip: "Checklist Todo\nNothing open. Click to add one.", urgent: false, dimmed: true });
+  // json mode never shows loading or a backend error
+  assert.equal(View.pillState(pillInput({ backend: "json", loaded: false })).dimmed, true);
+  assert.equal(View.pillState(pillInput({ backend: "json", error: { kind: "missing" } })).urgent, false);
+  // BarWidget's fallback before the panel loads: no items, no focus
+  assert.equal(View.pillState({ vertical: false, maxChars: 24 }).glyph, G.icon);
+});
+
+test("pillState: vertical bars show the icon only; the sync overlay replaces the glyph", () => {
+  const items = [item("5", "Review PR", "doing")];
+  const v = View.pillState(pillInput({ items, vertical: true }));
+  assert.equal(v.glyph, G.doing);
+  assert.equal(v.label, "");
+  assert.equal(View.pillState(pillInput({ items, maxChars: 0 })).label, "");
+  const failing = [{ name: "basecamp", enabled: true, lastOkAt: null, lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), intervalSec: 60, error: { kind: "offline", message: "m" } }];
+  const one = View.pillState(pillInput({ backend: "cli", items, sync: failing }));
+  assert.equal(one.glyph, G.syncAlert);
+  assert.equal(one.label, "Review PR");
+  assert.equal(one.urgent, false);
+  assert.ok(one.tooltip.endsWith("\nBasecamp sync failed 12m ago"));
+  const two = View.pillState(pillInput({ backend: "cli", items, sync: failing.concat([{ name: "obsidian", enabled: true, lastOkAt: null, lastAttemptAt: null, intervalSec: 5, error: { kind: "error", message: "m" } }]) }));
+  assert.ok(two.tooltip.endsWith("\n2 syncs failed"));
+  assert.equal(View.pillState(pillInput({ backend: "json", items, sync: failing })).glyph, G.doing, "json mode has no overlay");
+  const disabled = [{ name: "basecamp", enabled: false, lastOkAt: null, lastAttemptAt: null, intervalSec: 60, error: { kind: "auth", message: "m" } }];
+  assert.equal(View.pillState(pillInput({ backend: "cli", items, sync: disabled })).glyph, G.doing, "a disabled target does not fail");
+  assert.equal(View.pillState(pillInput({ backend: "cli", loaded: false, sync: failing })).glyph, G.icon, "no overlay on the loading state");
+});
+
+// ------------------------------------------------------------- footer
+test("UI-12 footer: the UX §4.7 table", () => {
+  assert.deepEqual(View.footer([], NOW, {}), { glyph: G.sync, text: "todocli · local only", urgent: false, tooltip: "", action: null });
+  assert.deepEqual(View.footer([target("basecamp", { enabled: false })], NOW, {}).text, "todocli · local only");
+  const ok = View.footer([target("basecamp"), target("obsidian", { lastOkAt: new Date(NOW - 5 * 60000).toISOString(), intervalSec: 5, lastAttemptAt: new Date(NOW - 5000).toISOString() })], NOW, {});
+  assert.deepEqual(ok, { glyph: G.sync, text: "todocli · synced 5m ago", urgent: false, tooltip: "Basecamp: ok 2m ago\nObsidian: ok 5m ago", action: null });
+  const never = View.footer([target("basecamp", { lastOkAt: null, lastAttemptAt: null })], NOW, {});
+  assert.equal(never.text, "todocli · not synced yet · R sync now");
+  assert.equal(never.action, "syncNow");
+  assert.equal(never.urgent, false);
+  assert.deepEqual(View.footer([target("basecamp")], NOW, { syncing: true }), { glyph: G.sync, text: "Syncing…", urgent: false, tooltip: "Basecamp: ok 2m ago", action: null });
+  const one = View.footer([target("basecamp", { lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), error: { kind: "auth", message: "x" } })], NOW, {});
+  assert.deepEqual(one, { glyph: G.syncAlert, text: "Basecamp sync failed 12m ago · R retry", urgent: true, tooltip: "Basecamp: failed 12m ago — signed out. Run: basecamp auth login", action: "syncNow" });
+  const two = View.footer([target("basecamp", { error: { kind: "offline", message: "x" } }), target("obsidian", { error: { kind: "vault_missing", message: "x" } })], NOW, {});
+  assert.equal(two.text, "2 syncs failed · R retry");
+  assert.equal(two.urgent, true);
+  assert.equal(two.glyph, G.syncAlert);
+  const stale = View.footer([target("basecamp", { lastAttemptAt: new Date(NOW - 2 * 3600000).toISOString() })], NOW, {});
+  assert.deepEqual(stale, { glyph: G.syncOff, text: "Sync daemon idle since 2h ago · R sync now", urgent: false, tooltip: "Basecamp: ok 2m ago", action: "syncNow" });
+  const off = View.footer([target("basecamp"), target("obsidian", { enabled: false })], NOW, {});
+  assert.equal(off.tooltip, "Basecamp: ok 2m ago\nObsidian: off");
+  assert.equal(View.footer(null, NOW, {}).text, "todocli · local only");
+  assert.equal(View.footer([null, target("basecamp")], NOW, {}).tooltip, "Basecamp: ok 2m ago", "holes are skipped");
+});
+
+test("footer reasons follow the UX §4.7 kind table", () => {
+  const cases = {
+    auth: "signed out. Run: basecamp auth login",
+    auth_unreachable: "credentials not reachable from todocli.service; terminal sync still works",
+    list_gone: "synced list trashed or archived in Basecamp; nothing changed here",
+    offline: "offline or Basecamp unreachable; retrying",
+    rate_limited: "rate limited by Basecamp; retrying",
+    cli_missing: "basecamp CLI not found",
+    vault_missing: "vault folder not found",
+    write_failed: "could not write the note",
+  };
+  for (const [kind, copy] of Object.entries(cases)) assert.equal(View.reason({ kind, message: "ignored" }), copy, kind);
+  assert.equal(View.reason({ kind: "removals_held", message: "3 removals held" }), "3 removals held; review, then todocli sync basecamp --accept-remote-removals");
+  assert.equal(View.reason({ kind: "removals_held", message: "" }), "removals held; review, then todocli sync basecamp --accept-remote-removals");
+  assert.equal(View.reason({ kind: "error", message: "first line of it\nsecond" }), "first line of it");
+  assert.equal(View.reason({ kind: "error", message: "x".repeat(80) }).length, 60);
+  assert.equal(View.reason({ kind: "error" }), "error");
+  assert.equal(View.reason(null), "");
+});
+
+// ------------------------------------------------------------- copy
+test("transient message copy (UX §4.5, §7) and the empty-state and help lines", () => {
+  assert.equal(View.msgDoneRow(item("12", "Write UX spec for the panels", "done"), "cli"), "#12 is done · d reopens it");
+  assert.equal(View.msgDoneRow(item("t1", "Write UX spec for the panels", "done"), "json"), "Write UX spec for the… is done · d reopens it");
+  assert.equal(View.taskRef(item("12", "Write", "doing"), "cli"), "#12");
+  assert.equal(View.taskRef(item("t1", "Write", "doing"), "json"), "Write");
+  assert.equal(View.msgTaskNotFound("99"), "Task 99 not found.");
+  assert.equal(View.emptyCopy([]), "Nothing here yet. Press + to add a todo.");
+  assert.equal(View.emptyCopy([item("1", "a", "done")]), "All clear. Press + to add a todo.");
+  assert.equal(View.emptyCopy([item("1", "a", "todo")]), null);
+  assert.equal(View.helpLine("list", "cli"), "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload · R sync · Tab next panel");
+  assert.equal(View.helpLine("list", "json"), "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload · Tab next panel");
+  assert.equal(View.helpLine("detail", "cli"), "Enter step · d done · s doing · f focus · p pomodoro · x x delete · Esc back");
+});
+
+// ------------------------------------------------------------- focus line
+test("focusLine renders the UX §4.2 variants F0–F6", () => {
+  const items = [item("12", "Write UX spec for the panels", "doing"), item("15", "Review PR !412", "doing"), item("2", "Book", "todo")];
+  assert.deepEqual(View.focusLine(items, { text: "", taskId: null }, idle), { variant: "F0", text: "No focus · f on a task sets it", selectable: false, item: null, timer: "", timerGlyph: "", timerDim: false, hint: "", tooltip: "" });
+  assert.equal(View.focusLine([], { text: "", taskId: null }, idle), null);
+  assert.equal(View.focusLine([item("1", "a", "done")], { text: "", taskId: null }, idle).variant, "F0");
+  const f1 = View.focusLine(items, { text: "", taskId: "12" }, idle);
+  assert.equal(f1.variant, "F1");
+  assert.equal(f1.text, "Write UX spec for the panels");
+  assert.equal(f1.item.id, "12");
+  assert.equal(f1.selectable, true);
+  assert.equal(View.focusLine(items, { text: "", taskId: "12" }, null).variant, "F1", "no pomodoro view reads as idle");
+  const f2 = View.focusLine(items, { text: "", taskId: "12" }, onTask("12"));
+  assert.equal(f2.variant, "F2");
+  assert.equal(f2.timer, "18:42");
+  assert.equal(f2.timerGlyph, G.pomodoro);
+  assert.equal(f2.timerDim, false);
+  const f3 = View.focusLine(items, { text: "", taskId: "12" }, onTask("12", { running: false }));
+  assert.equal(f3.variant, "F3");
+  assert.equal(f3.timer, "18:42 paused");
+  assert.equal(f3.timerDim, true);
+  const f4 = View.focusLine(items, { text: "", taskId: "12" }, onTask("12", { phase: "shortBreak", remaining: 190 }));
+  assert.equal(f4.variant, "F4");
+  assert.equal(f4.timer, "3:10");
+  assert.equal(f4.timerGlyph, G.brk);
+  const f5 = View.focusLine(items, { text: "", taskId: "12" }, onTask("15", { label: "Review PR !412" }));
+  assert.equal(f5.variant, "F5");
+  assert.equal(f5.hint, G.pomodoro + " 18:42 on Review PR !412 · p moves it here");
+  const gone = View.focusLine(items, { text: "", taskId: "12" }, onTask("99", { label: "Elsewhere" }));
+  assert.equal(gone.hint, G.pomodoro + " 18:42 on Elsewhere · p moves it here", "a task the list no longer has shows the pomodoro's label");
+  const f6 = View.focusLine(items, { text: "Ship the invoice-export slice", taskId: null }, idle);
+  assert.equal(f6.variant, "F6");
+  assert.equal(f6.text, "Ship the invoice-export slice");
+  assert.equal(f6.tooltip, "Focus set outside the list. Enter makes it a task.");
+  assert.equal(f6.item, null);
+  assert.equal(View.focusLine(items, { text: "Ship", taskId: "99" }, idle).variant, "F6", "a dangling link with text is a free-text focus");
+  assert.equal(View.focusLine(items, { text: "", taskId: "99" }, idle).variant, "F0");
+  assert.equal(View.focusLine(items, null, idle).variant, "F0", "no focus object reads as no focus");
+});
+
+// ------------------------------------------------------------- detail
+test("statusLine and action tooltips for the detail view (UX §4.4)", () => {
+  const it = item("12", "Write", "doing", { plan: [{ text: "a", done: true }, { text: "b", done: false }, { text: "c", done: false }], notes: [{ at: "t", text: "n" }, { at: "t", text: "m" }], due: "2026-10-02" });
+  const pom = onTask("12", { label: "Write" });
+  assert.equal(View.statusLine(it, { backend: "cli", focus: { text: "", taskId: "12" }, pomodoro: pom }), G.doing + " doing · #12 · plan 1/3 · 2 notes · focus · " + G.pomodoro + " 18:42 · due Oct 2");
+  assert.equal(View.statusLine(item("t1", "x", "todo", { notes: [{ at: "t", text: "n" }] }), { backend: "json", focus: { text: "", taskId: null }, pomodoro: null }), G.todo + " todo · 1 note");
+  assert.equal(View.statusLine(item("t1", "x", "done", { due: "2026-10-02" }), { backend: "json", focus: { text: "", taskId: null }, pomodoro: null }), G.done + " done", "due is cli-only");
+  assert.equal(View.statusLine(null, {}), "");
+  const tips = View.actionTooltips(it, { focus: { text: "", taskId: "12" }, pomodoro: pom, armed: false });
+  assert.deepEqual(tips, { doing: "Back to todo (s)", done: "Mark done (d)", focus: "Clear focus (f)", pomodoro: "Pause pomodoro (p)", del: "Delete (x x)", doingEnabled: true, focusEnabled: true, pomodoroEnabled: true });
+  const todoTips = View.actionTooltips(item("3", "x", "todo"), { focus: { text: "", taskId: "12" }, pomodoro: onTask("3", { running: false, remaining: 1, label: "" }), armed: true });
+  assert.equal(todoTips.doing, "Mark doing (s)");
+  assert.equal(todoTips.focus, "Set focus (f)");
+  assert.equal(todoTips.pomodoro, "Resume pomodoro (p)");
+  assert.equal(todoTips.del, "Click again to delete");
+  const doneTips = View.actionTooltips(item("3", "x", "done"), { focus: { text: "", taskId: null }, pomodoro: null, armed: false });
+  assert.equal(doneTips.done, "Reopen (d)");
+  assert.equal(doneTips.doing, "Done · d reopens it");
+  assert.equal(doneTips.focus, "Done · d reopens it");
+  assert.equal(doneTips.pomodoro, "Done · d reopens it");
+  assert.equal(doneTips.doingEnabled, false);
+  assert.equal(doneTips.pomodoroEnabled, false);
+  const doneAttached = View.actionTooltips(item("3", "x", "done"), { focus: { text: "", taskId: null }, pomodoro: onTask("3", { remaining: 1, label: "" }), armed: false });
+  assert.equal(doneAttached.pomodoro, "Pause pomodoro (p)");
+  assert.equal(doneAttached.pomodoroEnabled, true);
+  assert.equal(View.actionTooltips(item("3", "x", "todo"), {}).pomodoro, "Start pomodoro (p)");
+  assert.equal(View.actionTooltips(null, {}).done, "Mark done (d)", "no item reads as an open row");
+});
+
+// ------------------------------------------------------------- dump
+test("dumpView produces the UX §10.3 shape", () => {
+  const items = [item("12", "Write UX spec for the panels", "doing"), item("7", "Reply to Basecamp thread", "done"), item("3", "Book", "todo")];
+  const state = {
+    backend: "cli", cliPath: "todocli", view: "list", stale: false, error: null,
+    pill: { glyph: G.doing, label: "Write UX spec for the…", tooltip: "Doing: …", urgent: false, dimmed: false },
+    items, focus: { text: "Ship the invoice-export slice", taskId: "12" }, sessionDone: { 7: "todo" },
+    banner: null, footer: { glyph: G.sync, text: "todocli · synced 2m ago", urgent: false, tooltip: "", action: null }, message: null,
+  };
+  const d = View.dumpView(state);
+  assert.deepEqual(d, {
+    version: 1, backend: "cli", cliPath: "todocli", view: "list", stale: false, error: null,
+    pill: state.pill,
+    focus: { text: "Ship the invoice-export slice", taskId: "12" },
+    open: [{ id: "12", title: "Write UX spec for the panels", status: "doing" }, { id: "3", title: "Book", status: "todo" }],
+    done: [{ id: "7", title: "Reply to Basecamp thread" }],
+    banner: null, footer: { text: "todocli · synced 2m ago", urgent: false }, message: null,
+  });
+  assert.equal(JSON.parse(JSON.stringify(d)).open.length, 2);
+  for (const kind of ["missing", "busy", "failed", "protocol"]) {
+    const e = View.dumpView(Object.assign({}, state, { error: { kind, message: "m" }, stale: true, view: "error", footer: null, message: "Not saved — x." }));
+    assert.deepEqual(e.error, { kind, message: "m" });
+    assert.equal(e.stale, true);
+    assert.equal(e.footer, null);
+    assert.equal(e.message, "Not saved — x.");
+  }
+  assert.deepEqual(View.dumpView(Object.assign({}, state, { sessionDone: {} })).done, [], "a done row outside the session is not listed");
+  const bare = View.dumpView({});
+  assert.equal(bare.backend, "json");
+  assert.deepEqual(bare.open, []);
+  assert.deepEqual(bare.done, []);
+  assert.equal(bare.footer, null);
+  assert.equal(bare.pill.glyph, G.icon);
+});

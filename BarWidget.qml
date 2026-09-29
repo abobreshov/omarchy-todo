@@ -3,6 +3,9 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Store.js" as Store
+import "View.js" as View
+import "Pomodoro.js" as Pomodoro
 
 // Bar button for the todo plugin. Owns this instance's IPC handler and the
 // pill; the list, the editor, the stores and the save file all live in
@@ -29,7 +32,7 @@ BarWidget {
   readonly property var panel: panelLoader.item
   readonly property bool opened: panel ? panel.opened === true : false
   readonly property int itemCount: panel ? panel.openCount : 0
-  readonly property var pill: panel ? panel.pill : Model.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
+  readonly property var pill: panel ? panel.pill : View.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
   // Forwarded so opening another widget's popup closes this one cleanly.
   readonly property bool popoutSwitchClosing: panel ? panel.popoutSwitchClosing === true : false
 
@@ -50,8 +53,8 @@ BarWidget {
   function closeForPopoutSwitch() { if (panel) panel.closeForPopoutSwitch() }
   // The `refresh()` IPC push lands on one instance and is relayed here.
   function refresh() { if (panel) panel.refresh() }
-  // One Model.js action per mutating IPC function, with upstream's replies.
-  function perform(action) { return panel ? Model.ipcReply(action, panel.perform(action)) : "unavailable" }
+  // One Store.js action per mutating IPC function, with upstream's replies.
+  function perform(action) { return panel ? Store.ipcReply(action, panel.perform(action)) : "unavailable" }
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -152,7 +155,7 @@ BarWidget {
       else if (pressedButton === Qt.MiddleButton) {
         // UX §3.4: the same function as `p` on the focus line; no focus
         // toggles the panel.
-        if (!root.panel || root.panel.startPomodoro("focus") === Model.NO_FOCUS) root.togglePanel()
+        if (!root.panel || root.panel.startPomodoro("focus") === Pomodoro.NO_FOCUS) root.togglePanel()
       }
     }
   }

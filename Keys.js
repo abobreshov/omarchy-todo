@@ -1,5 +1,6 @@
 .pragma library
 .import "Model.js" as Model
+.import "View.js" as View
 
 // Key resolution and the panel's view-state reducer (UX §4.5, §7; PLAN
 // §6.8, A20). Pure: `keyAction` turns a key into a store action (or a
@@ -40,7 +41,7 @@ function clampCursor(index, count) {
 }
 
 // The status is the one source of truth for "done"; `sessionDone` only
-// drives ordering and visibility (Model.sortForList, Model.visibleItems).
+// drives ordering and visibility (View.sortForList, View.visibleItems).
 function isDoneRow(item) {
   return !!item && item.status === "done"
 }
@@ -69,14 +70,14 @@ function keyAction(view, key, ctx) {
     case "d":
       return { type: "setStatus", id: item.id, status: done ? "todo" : "done" }
     case "s":
-      if (done) return { type: "message", text: Model.msgDoneRow(item, c.backend) }
+      if (done) return { type: "message", text: View.msgDoneRow(item, c.backend) }
       return { type: "setStatus", id: item.id, status: item.status === "doing" ? "todo" : "doing" }
     case "f":
-      if (done) return { type: "message", text: Model.msgDoneRow(item, c.backend) }
+      if (done) return { type: "message", text: View.msgDoneRow(item, c.backend) }
       return { type: "focus", id: Model.isFocused(c.focus, item.id) ? "clear" : item.id }
     case "p":
       if (Model.isAttached(c.pomodoro, item.id)) return { type: "pausePomodoro" }
-      if (done) return { type: "message", text: Model.msgDoneRow(item, c.backend) }
+      if (done) return { type: "message", text: View.msgDoneRow(item, c.backend) }
       return { type: "startPomodoro", id: item.id }
     default:
       return null

@@ -2,13 +2,9 @@
 // read with PLAN A34's shape: global flags first, free text after `--`).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { loadQmlJs } from "./qml-js-loader.mjs";
+import { lib } from "./helpers.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const Model = loadQmlJs(path.join(here, "..", "Model.js"));
-const Argv = loadQmlJs(path.join(here, "..", "Argv.js"), { Model });
+const Argv = lib("Argv.js");
 
 test("todocli: cliPath first, global flags, then the command, then -- and the free text", () => {
   assert.deepEqual(Argv.todocli("todocli", ["add", "--description=Semi-skimmed"], ["--help"]), ["todocli", "--source", "omarchy", "--json", "add", "--description=Semi-skimmed", "--", "--help"]);

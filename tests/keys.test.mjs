@@ -2,13 +2,9 @@
 // fixtures (PLAN §6.8, A20).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { loadQmlJs } from "./qml-js-loader.mjs";
+import { lib } from "./helpers.mjs";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const Model = loadQmlJs(path.join(here, "..", "Model.js"));
-const Keys = loadQmlJs(path.join(here, "..", "Keys.js"), { Model });
+const Keys = lib("Keys.js");
 
 const item = (id, name, status, extra) => Object.assign({ id: String(id), uid: null, name, description: "", status, plan: [], notes: [], due: null, author: null }, extra || {});
 const idle = { phase: "idle", running: false, remaining: 0, taskId: "", label: "", attached: false };
@@ -321,6 +317,8 @@ test("text keys in the list route through keyAction with the cursor row as conte
   const detail = Object.assign(Keys.initialUi(), { view: "detail", selectedId: "6" });
   r = run(detail, [{ type: "key", key: "s", now: 0 }], ctx);
   assert.deepEqual(r.actions, [{ type: "setStatus", id: "6", status: "doing" }], "detail keys use the selected item");
+  r = run(Object.assign(Keys.initialUi(), { view: "detail", selectedId: "99" }), [{ type: "key", key: "s", now: 0 }], ctx);
+  assert.deepEqual(r.actions, [], "a detail key on a task the list no longer has does nothing");
   r = run(detail, [{ type: "key", key: "n", now: 0 }], ctx);
   assert.equal(r.ui.view, "detail");
   assert.deepEqual(r.actions, []);

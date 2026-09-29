@@ -1,0 +1,257 @@
+// Store.js under node --test (PLAN §9.4, A28): the json document (v1 and
+// v2, A17, E14), the cli document (§3.7, A39, E8), the optimistic id map
+// (A34) and the one mutation API both stores apply (UX §10.3 replies).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { lib, here, item, target } from "./helpers.mjs";
+
+const Model = lib("Model.js");
+const Store = lib("Store.js");
+const boardJson = fs.readFileSync(path.join(here, "fixtures", "board.json"), "utf8");
+const upstreamV1 = fs.readFileSync(path.join(here, "fixtures", "upstream-v1.json"), "utf8");
+
+// ------------------------------------------------------------- json document
+test("parseDocument reads v1 (upstream and bare array) as all todo with an empty focus", () => {
+  const doc = Store.parseDocument(upstreamV1);
+  assert.equal(doc.ok, true);
+  assert.deepEqual(doc.focus, { text: "", taskId: null });
+  assert.deepEqual(doc.todos.map((t) => [t.id, t.name, t.status]), [["t1", "Old A", "todo"], ["t2", "Old B", "todo"]]);
+  const bare = Store.parseDocument('[{"id":"a","name":"A"},{"id":"a","name":"B"}]');
+  assert.equal(bare.todos.length, 2);
+  assert.notEqual(bare.todos[0].id, bare.todos[1].id, "duplicate ids are re-issued");
+  assert.equal(bare.todos[1].name, "B");
+});
+
+test("parseDocument reads v2 with status, focus, plan and notes", () => {
+  const raw = JSON.stringify({ version: 2, focus: { text: "Ship it", taskId: "t9" }, todos: [{ id: "t9", name: "Nine", status: "doing", plan: [{ text: "s", done: false }], notes: [{ at: "2026-09-29T09:00:00.000Z", text: "n" }] }] });
+  const doc = Store.parseDocument(raw);
+  assert.deepEqual(doc.focus, { text: "Ship it", taskId: "t9" });
+  assert.equal(doc.todos[0].status, "doing");
+  assert.equal(doc.todos[0].plan[0].text, "s");
+  assert.equal(doc.todos[0].notes[0].text, "n");
+  const legacyFocus = Store.parseDocument(JSON.stringify({ version: 2, focus: "just text", todos: [] }));
+  assert.deepEqual(legacyFocus.focus, { text: "just text", taskId: null });
+  const missingTask = Store.parseDocument(JSON.stringify({ version: 2, focus: { text: "", taskId: "gone" }, todos: [{ id: "a", name: "A" }] }));
+  assert.equal(missingTask.focus.taskId, null, "a focus link to a missing item is dropped");
+});
+
+test("parseDocument: empty is an empty document; unparsable non-empty is E14", () => {
+  assert.deepEqual(Store.parseDocument(""), { ok: true, focus: { text: "", taskId: null }, todos: [] });
+  assert.deepEqual(Store.parseDocument("   \n"), { ok: true, focus: { text: "", taskId: null }, todos: [] });
+  assert.deepEqual(Store.parseDocument(null), { ok: true, focus: { text: "", taskId: null }, todos: [] });
+  const bad = Store.parseDocument("{ not json");
+  assert.equal(bad.ok, false);
+  assert.equal(bad.error, "unparsable");
+  assert.equal(Store.parseDocument("42").ok, true, "valid JSON that is not a document reads as empty, as upstream");
+  assert.equal(Store.parseDocument('{"todos": "nope"}').todos.length, 0);
+  assert.equal(Store.MSG_UNREADABLE, "Couldn't read todos.json. Fix or delete it — changes won't be saved until then.");
+});
+
+test("serializeDocument writes the v2 shape and round-trips", () => {
+  const doc = { focus: { text: " a  b ", taskId: "x1" }, todos: [item("x1", "One", "doing", { plan: [{ text: "p", done: true }], notes: [{ at: "t", text: "n" }] }), { name: "" }, item("x2", "Two", "todo")] };
+  const text = Store.serializeDocument(doc);
+  assert.ok(text.endsWith("\n"));
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.version, 2);
+  assert.deepEqual(parsed.focus, { text: "a b", taskId: "x1" });
+  assert.deepEqual(Object.keys(parsed.todos[0]), ["id", "name", "description", "status", "plan", "notes"]);
+  assert.equal(parsed.todos.length, 2);
+  assert.equal(Store.serializeDocument(Store.parseDocument(text)), text);
+  assert.equal(JSON.parse(Store.serializeDocument({})).focus.taskId, null);
+  assert.equal(JSON.parse(Store.serializeDocument({ focus: { text: "t", taskId: "missing" }, todos: [] })).focus.taskId, null);
+});
+
+// ------------------------------------------------------------- cli mapping
+test("fromCli maps the §3.7 document to the item model (A17)", () => {
+  const r = Store.fromCli(boardJson);
+  assert.equal(r.ok, true);
+  assert.equal(r.items.length, 1);
+  const t = r.items[0];
+  assert.equal(t.id, "3");
+  assert.equal(t.uid, "01a0e9f9-1c84-70b7-9fa9-61617eeb93ac");
+  assert.equal(t.name, "Wire the webhook");
+  assert.equal(t.status, "doing");
+  assert.deepEqual(t.plan, [{ text: "map payload", done: true }]);
+  assert.deepEqual(t.notes, [{ at: "2026-09-29T09:10:11.561Z", text: "sandbox account acct_4471" }]);
+  assert.equal(t.due, "2026-10-03");
+  assert.equal(t.author, null);
+  assert.deepEqual(r.focus, { text: "Ship the invoice-export slice", taskId: "3" });
+  assert.equal(r.sync.length, 1);
+  assert.equal(r.sync[0].name, "basecamp");
+  assert.equal(r.sync[0].error.kind, "offline");
+  assert.equal(r.sync[0].intervalSec, 60);
+});
+
+test("fromCli: free-text focus only, neither, and an object input", () => {
+  const onlyText = Store.fromCli({ version: 1, focus: "Just text", focus_task: null, tasks: [], sync: [] });
+  assert.deepEqual(onlyText.focus, { text: "Just text", taskId: null });
+  const neither = Store.fromCli({ version: 1, focus: null, focus_task: null, tasks: [{ id: 5, title: "  T  ", status: "todo" }] });
+  assert.deepEqual(neither.focus, { text: "", taskId: null });
+  assert.equal(neither.items[0].name, "T");
+  assert.deepEqual(neither.items[0].plan, []);
+  assert.deepEqual(neither.sync, []);
+  assert.equal(Store.fromCli({ version: 1, tasks: [{ id: 1, title: "" }] }).items.length, 0, "empty titles are skipped");
+  const sync = Store.fromCli({ version: 1, tasks: [], sync: [null, { name: " obsidian ", enabled: "true", intervalSec: "5", error: { kind: "", message: null } }] }).sync;
+  assert.deepEqual(sync, [{ name: "obsidian", enabled: true, lastOkAt: null, lastAttemptAt: null, intervalSec: 5, error: { kind: "error", message: "" } }]);
+});
+
+test("fromCli: a bad document or an unknown version is the protocol error (E8)", () => {
+  assert.deepEqual(Store.fromCli("not json").error.kind, "protocol");
+  assert.equal(Store.fromCli("").ok, false);
+  assert.equal(Store.fromCli({ version: 2, tasks: [] }).error.kind, "protocol");
+  assert.equal(Store.fromCli({ tasks: [] }).error.kind, "protocol");
+  assert.equal(Store.fromCli("[]").error.kind, "protocol");
+  assert.equal(Store.fromCli({ version: 1, tasks: "no" }).error.kind, "protocol");
+});
+
+test("smallestInterval picks the smallest enabled intervalSec, 0 when none", () => {
+  assert.equal(Store.smallestInterval([target("basecamp", { intervalSec: 60 }), target("obsidian", { intervalSec: 5 })]), 5);
+  assert.equal(Store.smallestInterval([target("basecamp", { intervalSec: 60 }), target("obsidian", { intervalSec: 5, enabled: false })]), 60);
+  assert.equal(Store.smallestInterval([]), 0);
+  assert.equal(Store.smallestInterval([target("basecamp", { intervalSec: 0 })]), 0);
+  assert.equal(Store.smallestInterval(null), 0);
+});
+
+test("rememberId and withRealId map an optimistic add's temporary id to the id todocli replied with (A34)", () => {
+  const map = Store.rememberId({}, "tabc", '{"id":42,"title":"x"}\n');
+  assert.deepEqual(map, { tabc: "42" });
+  assert.deepEqual(Store.rememberId(map, "tdef", "not json"), map, "no id, no mapping");
+  assert.deepEqual(Store.rememberId(map, "tdef", "[]"), map);
+  assert.deepEqual(Store.rememberId(map, "tdef", '{"title":"x"}'), map);
+  assert.deepEqual(Store.rememberId(null, "t1", '{"id":"7"}'), { t1: "7" });
+  assert.deepEqual(Store.withRealId({ type: "setStatus", id: "tabc", status: "done" }, map), { type: "setStatus", id: "42", status: "done" });
+  const untouched = { type: "remove", id: "7" };
+  assert.equal(Store.withRealId(untouched, map), untouched);
+  assert.equal(Store.withRealId({ type: "syncNow" }, map).type, "syncNow");
+  assert.equal(Store.withRealId(untouched, null), untouched);
+});
+
+test("the stores' transients", () => {
+  assert.equal(Store.MSG_SYNC_NEEDS_CLI, "Sync needs backend = cli.");
+  assert.equal(Store.MSG_SYNC_RUNNING, "Sync already running.");
+});
+
+// ------------------------------------------------------------- mutations
+test("addItem squishes, refuses an empty name and returns the clean name", () => {
+  const r = Store.addItem({ items: [], focus: { text: "", taskId: null } }, "  Buy   milk ", " semi ");
+  assert.equal(r.ok, true);
+  assert.equal(r.reply, "Buy milk");
+  assert.equal(r.doc.items.length, 1);
+  assert.equal(r.doc.items[0].status, "todo");
+  assert.equal(r.doc.items[0].description, "semi");
+  assert.equal(r.item.id, r.doc.items[0].id);
+  assert.deepEqual(r.action, { type: "add", name: "Buy milk", description: "semi" }, "the store persists the normalised action");
+  const empty = Store.addItem(r.doc, "   ", "x");
+  assert.equal(empty.ok, false);
+  assert.equal(empty.reply, "empty");
+  assert.equal(empty.doc.items, r.doc.items);
+  assert.equal(empty.action, null);
+});
+
+test("setStatus: done and todo clear the focus link, doing keeps it, unknown ids and bad statuses are refused", () => {
+  const items = [item("1", "A", "doing"), item("2", "B", "todo")];
+  const focus = { text: "T", taskId: "1" };
+  let r = Store.setStatus({ items, focus }, "1", "done");
+  assert.equal(r.reply, "ok");
+  assert.equal(r.doc.items[0].status, "done");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: null });
+  assert.deepEqual(r.action, { type: "setStatus", id: "1", status: "done" });
+  r = Store.setStatus({ items, focus }, "1", "todo");
+  assert.equal(r.doc.focus.taskId, null);
+  r = Store.setStatus({ items, focus }, 2, "doing");
+  assert.equal(r.doc.items[1].status, "doing");
+  assert.equal(r.doc.focus.taskId, "1");
+  assert.equal(r.action.id, "2", "ids are stringified");
+  assert.equal(Store.setStatus({ items, focus }, "9", "done").reply, "unknown id");
+  assert.equal(Store.setStatus({ items, focus }, "1", "nope").reply, "bad status");
+  assert.equal(items[0].status, "doing", "inputs are not mutated");
+});
+
+test("setFocus links a task (making it doing), refuses done, clears", () => {
+  const items = [item("1", "A", "todo"), item("2", "B", "done")];
+  const focus = { text: "T", taskId: null };
+  let r = Store.setFocus({ items, focus }, 1);
+  assert.equal(r.reply, "ok");
+  assert.equal(r.doc.items[0].status, "doing");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: "1" });
+  assert.deepEqual(r.action, { type: "focus", id: "1" });
+  assert.equal(Store.setFocus({ items, focus }, "2").reply, "refused: done");
+  assert.equal(Store.setFocus({ items, focus }, "7").reply, "unknown id");
+  r = Store.setFocus(r.doc, "clear");
+  assert.equal(r.reply, "ok");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: null });
+  assert.deepEqual(r.action, { type: "focus", id: "clear" });
+  assert.equal(r.doc.items[0].status, "doing", "clearing the focus keeps the task doing (§3.6)");
+});
+
+test("toggleStep flips one step, 1-based, and refuses bad input", () => {
+  const doc = { items: [item("1", "A", "todo", { plan: [{ text: "a", done: false }, { text: "b", done: true }] })], focus: null };
+  let r = Store.toggleStep(doc, "1", 2);
+  assert.equal(r.reply, "ok");
+  assert.deepEqual(r.doc.items[0].plan, [{ text: "a", done: false }, { text: "b", done: false }]);
+  assert.deepEqual(r.action, { type: "toggleStep", id: "1", n: 2 });
+  r = Store.toggleStep(doc, "1", "1");
+  assert.equal(r.doc.items[0].plan[0].done, true);
+  assert.equal(r.action.n, 1, "the step number is a number");
+  assert.equal(Store.toggleStep(doc, "1", 3).reply, "bad step");
+  assert.equal(Store.toggleStep(doc, "1", 0).reply, "bad step");
+  assert.equal(Store.toggleStep(doc, "1", "x").reply, "bad step");
+  assert.equal(Store.toggleStep(doc, "9", 1).reply, "unknown id");
+  assert.equal(doc.items[0].plan[1].done, true, "input untouched");
+});
+
+test("removeItem drops the item and a focus link to it", () => {
+  const items = [item("1", "A", "doing"), item("2", "B", "todo")];
+  let r = Store.removeItem({ items, focus: { text: "T", taskId: "1" } }, 1);
+  assert.equal(r.reply, "ok");
+  assert.deepEqual(r.doc.items.map((i) => i.id), ["2"]);
+  assert.equal(r.doc.focus.taskId, null);
+  assert.deepEqual(r.action, { type: "remove", id: "1" });
+  r = Store.removeItem({ items, focus: { text: "T", taskId: "1" } }, "2");
+  assert.equal(r.doc.focus.taskId, "1");
+  assert.equal(Store.removeItem({ items, focus: { text: "", taskId: null } }, "9").reply, "unknown id");
+  assert.equal(items.length, 2, "inputs are not mutated");
+});
+
+test("reduce: one action vocabulary, one result shape, frozen inputs untouched", () => {
+  const items = Object.freeze([
+    Object.freeze(item("1", "A", "todo", { plan: Object.freeze([Object.freeze({ text: "s", done: false })]) })),
+    Object.freeze(item("2", "B", "done")),
+  ]);
+  const doc = Object.freeze({ items, focus: Object.freeze({ text: "T", taskId: null }) });
+  const accepted = [
+    { type: "add", name: " New ", description: "" },
+    { type: "setStatus", id: 1, status: "doing" },
+    { type: "focus", id: 1 },
+    { type: "focus", id: "clear" },
+    { type: "toggleStep", id: "1", n: "1" },
+    { type: "remove", id: 1 },
+  ];
+  for (const a of accepted) {
+    const r = Store.reduce(doc, a);
+    assert.deepEqual(Object.keys(r).sort(), ["action", "doc", "item", "ok", "reply"], a.type);
+    assert.equal(r.ok, true, a.type);
+    assert.equal(r.action.type, a.type);
+    assert.deepEqual(Object.keys(r.doc), ["items", "focus"]);
+  }
+  assert.equal(items[0].status, "todo");
+  assert.equal(items[0].plan[0].done, false);
+  assert.equal(items.length, 2);
+  assert.equal(Store.reduce(doc, { type: "add", name: "x" }).item.name, "x");
+  assert.equal(Store.reduce(doc, { type: "remove", id: 1 }).item, null);
+  const refused = Store.reduce(doc, { type: "focus", id: 2 });
+  assert.deepEqual(refused, { ok: false, doc: { items, focus: { text: "T", taskId: null } }, reply: "refused: done", action: null, item: null });
+  assert.equal(Store.reduce(doc, { type: "nonsense" }).reply, "unknown action");
+  assert.equal(Store.reduce(null, null).reply, "unknown action");
+  assert.deepEqual(Store.reduce({}, { type: "add", name: "x" }).doc.focus, { text: "", taskId: null }, "a bare doc has an empty focus");
+  assert.equal(Store.reduce(doc, { type: "add", name: "x" }).item.status, Model.STATUSES[0], "a new item is todo");
+});
+
+test("ipcReply keeps upstream's replies: remove answers ok whatever the id (A-R2.1)", () => {
+  assert.equal(Store.ipcReply({ type: "remove", id: "zz" }, "unknown id"), "ok");
+  assert.equal(Store.ipcReply({ type: "remove", id: "zz" }, "unavailable: todocli not found"), "unavailable: todocli not found");
+  assert.equal(Store.ipcReply({ type: "setStatus", id: "zz", status: "done" }, "unknown id"), "unknown id");
+  assert.equal(Store.ipcReply({ type: "add", name: "x" }, "x"), "x");
+});

@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Model.js" as Model
+import "Pomodoro.js" as Pomodoro
 import "Argv.js" as Argv
 
 // The hand-off to the pomodoro plugin (PLAN §6.9, A52; UX §6). `startFor`
@@ -19,7 +19,7 @@ QtObject {
   property bool opened: false
   property double now: Date.now()
   property var state: null
-  readonly property var view: Model.pomodoroView(state, now)
+  readonly property var view: Pomodoro.pomodoroView(state, now)
   readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/abobreshov.pomodoro/"
 
   // {ok: true, word} or {ok: false, kind: missing|old|transient, text},
@@ -52,7 +52,7 @@ QtObject {
 
   property ArgvProcess proc: ArgvProcess {
     onFinished: function(code, spawnFailed, out, err) {
-      var r = Model.classifyShell(code, out, err, spawnFailed)
+      var r = Pomodoro.classifyShell(code, out, err, spawnFailed)
       link.result(r, link.request ? link.request.item : null)
       if (r.ok) link.rearm()
     }
@@ -68,7 +68,7 @@ QtObject {
     path: link.stateDir + "state.json"
     watchChanges: false
     printErrors: false
-    onLoaded: link.state = Model.parsePomodoroState(text())
+    onLoaded: link.state = Pomodoro.parsePomodoroState(text())
     onLoadFailed: link.state = null
   }
 

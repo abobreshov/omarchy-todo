@@ -1,0 +1,261 @@
+.pragma library
+.import "Model.js" as Model
+
+// The two document shapes and the one mutation API (PLAN §6.3, §6.4, A17,
+// A34). Pure and total, as Model.js; both stores apply every change through
+// `reduce`, so they answer alike.
+//
+// The json store's file (version 2; version 1 files read as all-todo):
+//   { "version": 2, "focus": { "text": "", "taskId": null },
+//     "todos": [ { "id", "name", "description", "status", "plan", "notes" } ] }
+// The cli store reads todocli's `board --json` document (PLAN §3.7) through
+// `fromCli` and maps an optimistic add's temporary id to the id todocli
+// replied with (`rememberId`, `withRealId`).
+
+// The stores' own transients (UX §4.5, §7 E14).
+var MSG_SYNC_NEEDS_CLI = "Sync needs backend = cli."
+var MSG_SYNC_RUNNING = "Sync already running."
+var MSG_UNREADABLE = "Couldn't read todos.json. Fix or delete it — changes won't be saved until then."
+
+// ---------------------------------------------------------------- json
+
+function emptyDocument() { return { ok: true, focus: { text: "", taskId: null }, todos: [] } }
+
+// The json store's reader. v1 (upstream `{version: 1, todos}` or a bare
+// array) reads as all-todo with an empty focus; v2 carries status, plan,
+// notes and the focus link. A non-empty file that does not parse is E14: the
+// caller shows the banner and blocks saves, never overwriting the file.
+function parseDocument(raw) {
+  var text = raw === undefined || raw === null ? "" : String(raw)
+  if (Model.squish(text) === "") return emptyDocument()
+  var data
+  try {
+    data = JSON.parse(text)
+  } catch (e) {
+    return { ok: false, error: "unparsable" }
+  }
+  var list = null
+  var focus = null
+  if (Array.isArray(data)) list = data
+  else if (data && typeof data === "object") {
+    if (Array.isArray(data.todos)) list = data.todos
+    if (data.version === 2) focus = data.focus
+  }
+  var out = []
+  var seen = {}
+  if (list) {
+    for (var i = 0; i < list.length; i++) {
+      var item = Model.normalize(list[i])
+      if (!item) continue
+      if (seen[item.id]) item.id = Model.makeId()
+      seen[item.id] = true
+      out.push(item)
+    }
+  }
+  return { ok: true, focus: Model.normalizeFocus(focus, out), todos: out }
+}
+
+function serializeDocument(doc) {
+  var list = []
+  var source = doc && Array.isArray(doc.todos) ? doc.todos : (doc && Array.isArray(doc.items) ? doc.items : [])
+  for (var i = 0; i < source.length; i++) {
+    var item = Model.normalize(source[i])
+    if (item) list.push({ id: item.id, name: item.name, description: item.description, status: item.status, plan: item.plan, notes: item.notes })
+  }
+  var focus = Model.normalizeFocus(doc ? doc.focus : null, list)
+  return JSON.stringify({ version: 2, focus: focus, todos: list }, null, 2) + "\n"
+}
+
+// ---------------------------------------------------------------- cli
+
+function protocolError(message) {
+  return { ok: false, error: { kind: "protocol", message: message } }
+}
+
+function normalizeSync(sync) {
+  var out = []
+  if (!Array.isArray(sync)) return out
+  for (var i = 0; i < sync.length; i++) {
+    var t = sync[i]
+    if (!t || typeof t !== "object") continue
+    var err = t.error && typeof t.error === "object" ? { kind: Model.squish(t.error.kind) || "error", message: Model.str(t.error.message) } : null
+    out.push({
+      name: Model.squish(t.name),
+      enabled: t.enabled === true || t.enabled === "true",
+      lastOkAt: t.lastOkAt === undefined || t.lastOkAt === null ? null : t.lastOkAt,
+      lastAttemptAt: t.lastAttemptAt === undefined || t.lastAttemptAt === null ? null : t.lastAttemptAt,
+      intervalSec: Number(t.intervalSec) || 0,
+      error: err
+    })
+  }
+  return out
+}
+
+// The cli store re-reads every smallest enabled intervalSec while the panel
+// is open (PLAN A34b); 0 when no target is enabled.
+function smallestInterval(sync) {
+  var best = 0
+  var list = sync || []
+  for (var i = 0; i < list.length; i++) {
+    var t = list[i]
+    if (!t || !t.enabled || !(t.intervalSec > 0)) continue
+    if (best === 0 || t.intervalSec < best) best = t.intervalSec
+  }
+  return best
+}
+
+// `board --json` (PLAN §3.7, A39) -> { ok, items, focus, sync } or the
+// protocol error (E8) for a document this panel does not understand.
+function fromCli(raw) {
+  var data = raw
+  if (typeof raw === "string") {
+    try {
+      data = JSON.parse(raw)
+    } catch (e) {
+      return protocolError("todocli answered, but not with JSON")
+    }
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return protocolError("todocli answered, but not with a JSON document")
+  if (data.version !== 1) return protocolError("unknown JSON schema version " + JSON.stringify(data.version === undefined ? null : data.version))
+  if (!Array.isArray(data.tasks)) return protocolError("the document has no tasks list")
+  var items = []
+  for (var i = 0; i < data.tasks.length; i++) {
+    var t = data.tasks[i]
+    if (!t || typeof t !== "object") continue
+    var item = Model.normalize({
+      id: t.id, uid: t.uid, name: t.title, description: t.description, status: t.status,
+      plan: t.plan, notes: t.notes, due: t.due, author: t.author
+    })
+    if (item) items.push(item)
+  }
+  var focus = { text: Model.squish(data.focus), taskId: Model.strOrNull(data.focus_task) }
+  return { ok: true, items: items, focus: focus, sync: normalizeSync(data.sync) }
+}
+
+// The reply of a write is the affected task as one JSON object (§3.6): an
+// optimistic add's temporary id maps to its `id`, so a key pressed on the
+// new row before the re-read still names the right task (A34).
+function rememberId(idMap, tempId, out) {
+  var map = idMap || {}
+  var data
+  try {
+    data = JSON.parse(String(out))
+  } catch (e) {
+    return map
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.id === undefined || data.id === null) return map
+  var next = {}
+  for (var k in map) next[k] = map[k]
+  next[String(tempId)] = String(data.id)
+  return next
+}
+
+function withRealId(action, idMap) {
+  var map = idMap || {}
+  if (!action || action.id === undefined || map[action.id] === undefined) return action
+  var out = {}
+  for (var k in action) out[k] = action[k]
+  out.id = map[action.id]
+  return out
+}
+
+// ---------------------------------------------------------------- mutations
+// One action vocabulary, shared by the keys (Keys.js emits it), the argv
+// (Argv.forAction maps it to a todocli command) and both stores (they apply
+// it through `reduce`):
+//   {type: "add", name, description}   {type: "setStatus", id, status}
+//   {type: "focus", id | "clear"}      {type: "toggleStep", id, n}
+//   {type: "remove", id}
+// Every mutator returns the same shape, {ok, doc: {items, focus}, reply,
+// action, item}: new arrays and the inputs untouched, so a failed cli write
+// is reverted by keeping the previous doc; `reply` is the IPC reply of UX
+// §10.3 (the clean name for add, "ok", or the refusal); `action` is the
+// normalised action to persist (squished text, string ids, numeric step).
+
+function docOf(doc) {
+  var d = doc || {}
+  return { items: d.items || [], focus: Model.normalizeFocus(d.focus, null) }
+}
+
+function refused(doc, reply) { return { ok: false, doc: doc, reply: reply, action: null, item: null } }
+
+function accepted(doc, reply, action, item) { return { ok: true, doc: doc, reply: reply, action: action, item: item || null } }
+
+function replaceItem(items, id, updater) {
+  return items.map(function(it) {
+    if (!it || it.id !== String(id)) return it
+    var copy = Model.copyItem(it)
+    updater(copy)
+    return copy
+  })
+}
+
+function clearFocusIf(focus, id) {
+  return { text: focus.text, taskId: focus.taskId === String(id) ? null : focus.taskId }
+}
+
+function addItem(doc, name, description) {
+  var d = docOf(doc)
+  var cleanName = Model.squish(name)
+  if (cleanName === "") return refused(d, "empty")
+  var item = Model.normalize({ id: Model.makeId(), name: cleanName, description: description, status: "todo" })
+  return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, { type: "add", name: cleanName, description: item.description }, item)
+}
+
+function setStatus(doc, id, status) {
+  var d = docOf(doc)
+  var s = Model.normalizeStatus(status)
+  if (s !== String(status)) return refused(d, "bad status")
+  if (!Model.findItem(d.items, id)) return refused(d, "unknown id")
+  var items = replaceItem(d.items, id, function(it) { it.status = s })
+  // A focused task is always doing: leaving doing clears the link, the
+  // free text stays (PRODUCT UC-5 A2b).
+  var focus = s === "doing" ? d.focus : clearFocusIf(d.focus, id)
+  return accepted({ items: items, focus: focus }, "ok", { type: "setStatus", id: String(id), status: s })
+}
+
+function setFocus(doc, idOrClear) {
+  var d = docOf(doc)
+  var key = String(idOrClear)
+  if (key === "clear") return accepted({ items: d.items, focus: { text: d.focus.text, taskId: null } }, "ok", { type: "focus", id: "clear" })
+  var it = Model.findItem(d.items, key)
+  if (!it) return refused(d, "unknown id")
+  if (it.status === "done") return refused(d, "refused: done")
+  var items = replaceItem(d.items, key, function(c) { c.status = "doing" })
+  return accepted({ items: items, focus: { text: d.focus.text, taskId: key } }, "ok", { type: "focus", id: key })
+}
+
+function toggleStep(doc, id, n) {
+  var d = docOf(doc)
+  var it = Model.findItem(d.items, id)
+  if (!it) return refused(d, "unknown id")
+  var index = Number(n)
+  if (!(index >= 1) || index > it.plan.length || Math.floor(index) !== index) return refused(d, "bad step")
+  var items = replaceItem(d.items, id, function(c) { c.plan[index - 1].done = !c.plan[index - 1].done })
+  return accepted({ items: items, focus: d.focus }, "ok", { type: "toggleStep", id: String(id), n: index })
+}
+
+function removeItem(doc, id) {
+  var d = docOf(doc)
+  if (!Model.findItem(d.items, id)) return refused(d, "unknown id")
+  var items = d.items.filter(function(it) { return it && it.id !== String(id) })
+  return accepted({ items: items, focus: clearFocusIf(d.focus, id) }, "ok", { type: "remove", id: String(id) })
+}
+
+function reduce(doc, action) {
+  var a = action || {}
+  switch (a.type) {
+    case "add": return addItem(doc, a.name, a.description)
+    case "setStatus": return setStatus(doc, a.id, a.status)
+    case "focus": return setFocus(doc, a.id)
+    case "toggleStep": return toggleStep(doc, a.id, a.n)
+    case "remove": return removeItem(doc, a.id)
+    default: return refused(docOf(doc), "unknown action")
+  }
+}
+
+// The IPC surface keeps upstream's replies (A-R2.1): `remove` answers "ok"
+// whatever the id.
+function ipcReply(action, reply) {
+  return action.type === "remove" && reply === "unknown id" ? "ok" : reply
+}

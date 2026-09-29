@@ -1,7 +1,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Model.js" as Model
+import "Store.js" as Store
+import "Errors.js" as Errors
 import "Argv.js" as Argv
 
 // The cli backend (PLAN §6.4, A34, A34b): every call is a plain argv
@@ -21,7 +22,7 @@ TodoStore {
 
   hasSync: true
   // E5 on a read: the banner above the last good list (UX §7).
-  banner: error && error.kind === "busy" ? Model.errorView(error, { lastGoodAt: lastGoodAt }).banner : ""
+  banner: error && error.kind === "busy" ? Errors.errorView(error, { lastGoodAt: lastGoodAt }).banner : ""
 
   property string cliPath: "todocli"
   readonly property string stampDir: Quickshell.env("HOME") + "/.local/state/todocli/"
@@ -44,8 +45,8 @@ TodoStore {
   }
 
   function finishRead(code, spawnFailed, out, err) {
-    var e = Model.classifyExit(code, err, spawnFailed)
-    var doc = e ? null : Model.fromCli(out)
+    var e = Errors.classifyExit(code, err, spawnFailed)
+    var doc = e ? null : Store.fromCli(out)
     if (doc && !doc.ok) e = doc.error
     if (e) {
       error = e
@@ -80,8 +81,8 @@ TodoStore {
   //      The action is applied to the local doc at once and queued for the
   //      write FIFO with the doc to restore should the write fail.
   function perform(action, done) {
-    if (error) return Model.unavailable(error)
-    var r = Model.reduce({ items: items, focus: focus }, action)
+    if (error) return Errors.unavailable(error)
+    var r = Store.reduce({ items: items, focus: focus }, action)
     if (!r.ok) return r.reply
     var prev = { items: items, focus: focus }
     items = r.doc.items
@@ -95,18 +96,18 @@ TodoStore {
   function pump() {
     if (pending || writeProc.running || queue.length === 0) return
     pending = queue.shift()
-    writeProc.run(Argv.forAction(cliPath, Model.withRealId(pending.action, idMap)))
+    writeProc.run(Argv.forAction(cliPath, Store.withRealId(pending.action, idMap)))
   }
 
   function finishWrite(code, spawnFailed, out, err) {
-    var e = Model.classifyExit(code, err, spawnFailed)
+    var e = Errors.classifyExit(code, err, spawnFailed)
     var job = pending
     pending = null
     if (!job) return
     if (e) {
       job.revert()
       failed(e)
-    } else if (job.tempId) idMap = Model.rememberId(idMap, job.tempId, out)
+    } else if (job.tempId) idMap = Store.rememberId(idMap, job.tempId, out)
     if (job.done) job.done(e)
   }
 
@@ -120,7 +121,7 @@ TodoStore {
   // ---- `sync all`, single-flight outside the write FIFO; a second call
   //      while one runs is ignored (footer shows "Syncing…").
   function syncNow() {
-    if (error) return Model.unavailable(error)
+    if (error) return Errors.unavailable(error)
     if (syncProc.running) return "ok"
     syncing = true
     syncProc.run(Argv.forAction(cliPath, { type: "syncNow" }))
@@ -129,11 +130,11 @@ TodoStore {
 
   function finishSync(code, spawnFailed, out, err) {
     syncing = false
-    var e = Model.classifyExit(code, err, spawnFailed)
+    var e = Errors.classifyExit(code, err, spawnFailed)
     if (!e) {
       Qt.callLater(store.read)
       syncFinished({ ok: true })
-    } else if (e.kind === "busy") syncFinished({ ok: false, message: Model.MSG_SYNC_RUNNING })
+    } else if (e.kind === "busy") syncFinished({ ok: false, message: Store.MSG_SYNC_RUNNING })
     else {
       error = e
       stale = loaded
@@ -184,9 +185,9 @@ TodoStore {
   // Every smallest enabled intervalSec while the panel is open, so the
   // footer's `lastAttemptAt` and E10 stay live between stamps.
   property Timer intervalRead: Timer {
-    interval: Math.max(1000, Model.smallestInterval(store.sync) * 1000)
+    interval: Math.max(1000, Store.smallestInterval(store.sync) * 1000)
     repeat: true
-    running: store.active && store.opened && Model.smallestInterval(store.sync) > 0
+    running: store.active && store.opened && Store.smallestInterval(store.sync) > 0
     onTriggered: store.read()
   }
 

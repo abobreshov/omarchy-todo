@@ -1,27 +1,48 @@
 // Loads a QML `.pragma library` JavaScript file under Node for unit tests.
 //
-// The `.pragma library` line (always line 1) becomes the opening of a wrapper
-// function whose parameters are the `.import "X.js" as Q` qualifiers, and
-// every `.import` line is blanked, so line numbers in the coverage report
-// match the source file. The script runs in this context through
-// `vm.Script` with its absolute filename, so Node's
-// `--experimental-test-coverage` attributes lines to it and objects it
-// returns share the test's prototypes (research/_verified.md, "Node coverage
-// over QML .js libraries"; PLAN A28).
+// The source is rewritten in place, keeping every line and every character
+// offset: the `.pragma library` line (always line 1) becomes the opening of a
+// wrapper function, `(function(__i){`, padded to the same length, and every
+// `.import "X.js" as Q` line becomes `var Q=__i.Q;` padded to its length.
+// Node maps V8's coverage ranges onto the file on disk, so an offset drift
+// would credit the wrong lines; with none, `--experimental-test-coverage`
+// attributes every range to the line it came from. The script runs in this
+// context through `vm.Script` with its absolute filename, so the objects it
+// returns share the test's prototypes and `assert.deepEqual` sees them as
+// plain arrays and objects (research/_verified.md, "Node coverage over QML
+// .js libraries"; PLAN A28).
+//
+// Imports resolve the way the QML engine resolves them: each `.import`ed
+// library loads from the path next to the importing file, once per process
+// (`.pragma library` = one shared instance), recursively. A test may still
+// hand a qualifier in `imports` to inject its own object; such a load is not
+// cached, so the shared instances stay untouched.
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 
+const shared = new Map();
+
 export function loadQmlJs(file, imports = {}) {
   const abs = path.resolve(file);
+  const injected = Object.keys(imports).length > 0;
+  if (!injected && shared.has(abs)) return shared.get(abs);
   const src = fs.readFileSync(abs, "utf8");
   const lines = src.split("\n");
-  const names = new Set();
-  const params = Object.keys(imports);
   if (!/^\.pragma\s+library/.test(lines[0])) throw new Error(abs + ": line 1 must be `.pragma library`");
-  const blanked = lines.map((line, i) => {
-    if (i === 0) return "(function(" + params.join(",") + "){";
-    if (/^\.import\s/.test(line)) return "";
+  const inPlace = (text, line) => {
+    if (text.length > line.length) throw new Error(abs + ": cannot rewrite `" + line + "` at its own length");
+    return text + " ".repeat(line.length - text.length);
+  };
+  const names = new Set();
+  const deps = Object.assign({}, imports);
+  const rewritten = lines.map((line, i) => {
+    if (i === 0) return inPlace("(function(__i){", line);
+    const imp = /^\.import\s+"([^"]+)"\s+as\s+([A-Za-z_$][\w$]*)/.exec(line);
+    if (imp) {
+      if (!(imp[2] in deps)) deps[imp[2]] = loadQmlJs(path.resolve(path.dirname(abs), imp[1]));
+      return inPlace("var " + imp[2] + "=__i." + imp[2] + ";", line);
+    }
     const fn = /^function\s+([A-Za-z_$][\w$]*)\s*\(/.exec(line);
     if (fn) names.add(fn[1]);
     const v = /^var\s+([A-Za-z_$][\w$]*)\s*=/.exec(line);
@@ -29,7 +50,8 @@ export function loadQmlJs(file, imports = {}) {
     return line;
   });
   const tail = "\n;return {" + [...names].join(",") + "}})";
-  const script = new vm.Script(blanked.join("\n") + tail, { filename: abs });
-  const factory = script.runInThisContext();
-  return factory(...params.map((p) => imports[p]));
+  const script = new vm.Script(rewritten.join("\n") + tail, { filename: abs });
+  const lib = script.runInThisContext()(deps);
+  if (!injected) shared.set(abs, lib);
+  return lib;
 }
