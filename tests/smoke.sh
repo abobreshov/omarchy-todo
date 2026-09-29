@@ -142,6 +142,23 @@ check "vertical pill is icon-only" "$(qs ipc -p "$root" call smoke pill | field 
 check "vertical widget width is the bar size" "$(qs ipc -p "$root" call smoke width)" "28"
 stop
 
+# ---- E14: an unreadable file blocks saves until it is fixed or deleted -----
+own="$home/.local/state/abobreshov.todo/todos.json"
+printf '{broken' >"$own"
+start '{"backend":"json"}'
+sleep 0.5
+check "E14 banner on an unreadable file" "$(dump | field 'd["banner"]')" "Couldn't read todos.json. Fix or delete it — changes won't be saved until then."
+check "E14 add is accepted" "$(call add 'Lost' '')" "Lost"
+sleep 0.5
+check "E14 file never overwritten" "$(cat "$own")" "{broken"
+rm "$own"
+sleep 0.6
+check "E14 block lifts when the file is deleted" "$(dump | field 'd["banner"]')" "None"
+check "E14 add after the delete" "$(call add 'Found' '')" "Found"
+sleep 0.6
+check "E14 the new file holds the item" "$(python3 -c 'import json,sys; print([t["name"] for t in json.load(open(sys.argv[1]))["todos"]])' "$own")" "['Found']"
+stop
+
 if grep -q "WARN.*Panel.qml\|WARN.*BarWidget.qml\|Binding loop\|SMOKE load error" "$scratch/qs.log"; then
   echo "FAIL qs log has plugin warnings:"; grep "WARN\|SMOKE" "$scratch/qs.log"; fails=$((fails + 1))
 fi

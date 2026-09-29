@@ -160,7 +160,9 @@ QtObject {
     onLoaded: store.applyLoaded(text())
     // First run: no file yet. FileView reports that as a load failure, and
     // without this branch `loaded` stays false forever and saving is a no-op.
-    onLoadFailed: store.onOwnFileMissing()
+    // After E14 a missing file means the user deleted the unreadable one, as
+    // the banner suggests: the block lifts and the list starts empty.
+    onLoadFailed: store.blocked ? store.applyLoaded("") : store.onOwnFileMissing()
   }
 
   property FileView upstreamFile: FileView {
