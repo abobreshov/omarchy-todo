@@ -101,12 +101,10 @@ omarchy bar set abobreshov.todo <key> <value>     # numbers need --json
 
 ### Switching from json to cli
 
-1. Install `todocli` and import the panel's list once (additive and
-   idempotent; a second import adds nothing):
-
-   ```bash
-   todocli import --omarchy ~/.local/state/abobreshov.todo/todos.json
-   ```
+1. Install `todocli` and bring the panel's list over. The one-shot import
+   (`todocli import --omarchy ~/.local/state/abobreshov.todo/todos.json`,
+   additive and idempotent: a second run adds nothing) arrives with the next
+   `todocli` release; until then, re-add the open items with `todocli add`.
 
 2. `omarchy bar set abobreshov.todo backend cli`
 
@@ -146,7 +144,7 @@ omarchy-shell abobreshov.todo open|close|show|hide|toggle
 # Fork additions
 omarchy-shell abobreshov.todo setStatus <id> todo|doing|done  # -> ok | unknown id | bad status
 omarchy-shell abobreshov.todo focus <id>|clear                # -> ok | unknown id | refused: done
-omarchy-shell abobreshov.todo startPomodoro <id>|focus        # -> ok | unknown id | no focus
+omarchy-shell abobreshov.todo startPomodoro <id>|focus        # -> ok | unknown id | no focus | refused: done
 omarchy-shell abobreshov.todo toggleStep <id> <n>             # -> ok | unknown id | bad step
 omarchy-shell abobreshov.todo openTask <id>                   # -> ok | "Task <id> not found."
 omarchy-shell abobreshov.todo refresh                         # -> ok (re-reads on every monitor)
@@ -179,10 +177,30 @@ rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 ## Development
 
 All logic lives in `Model.js`, `Keys.js` and `Argv.js` (`.pragma library`);
-the QML files bind and forward. Every `Text` that shows user text sets
-`textFormat: Text.PlainText`; the pill and tooltip text (kit-owned) goes
-through `Model.pillLabel`/`Model.tooltip`, which turn `<`/`>` into `‹`/`›`.
-Every external command is an argv list for a `Process`, never a shell string.
+the QML files bind and forward. `Model.reduce(doc, action)` is the one
+mutation API: the keys emit an action (`add`, `setStatus`, `focus`,
+`toggleStep`, `remove`), `Argv.forAction` maps it to a `todocli` command and
+both stores apply it through `perform(action, done)`. `TodoStore.qml` is the
+store interface; `JsonStore.qml` and `CliStore.qml` extend it and answer
+alike, so `Panel.qml` never asks which backend it is. `ArgvProcess.qml`
+runs every external command as an argv list (never a shell string) and
+reports a binary that cannot be spawned. Every `Text` that shows user text
+sets `textFormat: Text.PlainText`; the pill and tooltip text (kit-owned)
+goes through `Model.pillLabel`/`Model.tooltip`, which turn `<`/`>` into
+`‹`/`›`.
+
+Size: the plugin is about 3,000 lines of QML and JS against the 1,800 the
+plan budgeted (upstream is ~690). The difference is the UX surface, not extra
+features: the focus line with its seven variants, the detail view, the sync
+footer, the error view and the keyboard reducer each carry their own states
+and copy. Recorded as a deviation.
+
+One `IpcHandler` per widget instance is the shell's own pattern. Quickshell
+0.3.1 logs `WARN … Handler was registered but will not be used because
+another handler is registered for target abobreshov.todo` for the second
+instance (a warning, not an error); the later registration answers and
+relays `refresh()` to its peers with `broadcast`, so a second monitor needs
+nothing more.
 
 ```bash
 # Unit tests with the 95 % line-coverage gate (Node ≥ 22)
@@ -202,7 +220,8 @@ tests/smoke.sh
 The lint recipe by hand: `/usr/lib/qt6/bin/qmllint -I <dir-with-a-qs-symlink>
 *.qml`, where `<dir>/qs -> /usr/share/omarchy/shell`. The baseline holds the
 kit's inherent `missing-property` warnings on the `Style` singleton's
-sub-objects and the `signal-handler-parameters` warning on `Process.onExited`.
+sub-objects and the `signal-handler-parameters` warning on `Process.onExited`
+in `ArgvProcess.qml`.
 
 Edits under `~/.config/omarchy/plugins/` hot-reload on save.
 

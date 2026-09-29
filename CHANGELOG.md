@@ -50,6 +50,15 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   `tools/qmllint.sh` with a warning baseline, a fake `todocli` and
   `tests/smoke.sh`, a headless IPC smoke test in a scratch Quickshell instance.
 
+### Notes
+
+- Size: about 3,000 lines of QML and JS against the 1,800 the plan
+  budgeted. The overrun is the UX surface (focus line variants, detail view,
+  sync footer, error view, keyboard reducer), not extra features; recorded as
+  a deviation.
+- `todocli import --omarchy` (the one-shot json → cli import) arrives with
+  the next `todocli` release; the README says so.
+
 ## [1.0.0] - 2026-09-25
 
 ### Added

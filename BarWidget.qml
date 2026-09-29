@@ -13,8 +13,9 @@ import "Model.js" as Model
 // (Ui/BarWidget.qml, the first-party clock): the target routes to one
 // instance, which relays `refresh()` to its peers with `broadcast`; a
 // mutator runs once on the routed instance and `dump()` answers from it
-// (PLAN §6.6). Quickshell 0.3.1 logs a warning for the second registration
-// on the same target and keeps the first (S2 probe).
+// (PLAN §6.6). Quickshell 0.3.1 logs a warning (not an error) for the second
+// registration on the same target; the later registration answers (S2
+// probe, recorded in the README).
 BarWidget {
   id: root
 
