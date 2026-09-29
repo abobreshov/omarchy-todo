@@ -14,8 +14,9 @@ import "Keys.js" as KeyMap
 // the IPC target and lifecycle forwarding; this file picks the store
 // (`backend === "cli" ? cliStore : jsonStore`, PLAN §6.4), runs the view
 // machine through KeyMap.reduceUi, applies the actions it returns to the
-// store, and hosts the views (list, compose, detail, error). All logic lives
-// in the .js libraries; this file binds and forwards.
+// store, and hosts the views (TaskList, ComposeView, DetailView,
+// StatusFooter). All logic lives in the .js libraries; this file binds and
+// forwards.
 Panel {
   id: root
 
@@ -79,7 +80,7 @@ Panel {
   // instead, and only once the first read has taken 300 ms.
   readonly property bool loading: !store.loaded && store.error === null
   property bool loadingShown: false
-  readonly property string emptyCopy: loading ? (loadingShown ? "Loading\u2026" : "") : (store.loaded ? (View.emptyCopy(items) || "") : "")
+  readonly property string emptyCopy: loading ? (loadingShown ? "Loading…" : "") : (store.loaded ? (View.emptyCopy(items) || "") : "")
   onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
   // Change handlers below write `ui`; during construction the first
@@ -116,10 +117,6 @@ Panel {
   Component.onCompleted: {
     ready = true
     store.load()
-  }
-
-  function focusNameField() {
-    if (nameField) nameField.forceActiveFocus()
   }
 
   function focusKeyCatcher() {
@@ -163,25 +160,9 @@ Panel {
       case "message": showMessage(action.text); break
       case "close": root.close(); break
       case "switchPanel": root.switchPanel(action.direction); break
-      case "composeOpened":
-        nameField.text = action.prefill
-        descriptionField.text = ""
-        Qt.callLater(root.focusNameField)
-        break
+      case "composeOpened": compose.open(action.prefill); break
       default: break
     }
-  }
-
-  // Compose fields own their text; the reducer decides what Enter/Esc/Tab do.
-  function composeKey(field, kind) {
-    dispatch({ type: "text", text: field.text })
-    dispatch({ type: kind })
-    if (ui.view !== "compose") {
-      nameField.text = ""
-      descriptionField.text = ""
-      focusKeyCatcher()
-    } else if (ui.composeField === "description") descriptionField.forceActiveFocus()
-    else nameField.forceActiveFocus()
   }
 
   function hoverRow(index) { dispatch({ type: "hover", index: index }) }
@@ -192,15 +173,6 @@ Panel {
   }
   function backToList() { dispatch({ type: "esc" }) }
   function beginCompose() { dispatch({ type: "key", key: "n" }) }
-  function cancelCompose() { composeKey(nameField, "esc") }
-  function saveCompose() {
-    dispatch({ type: "text", text: nameField.text })
-    if (ui.composeField === "name") {
-      dispatch({ type: "enter" })
-      if (ui.composeField !== "description") { focusNameField(); return }
-    }
-    composeKey(descriptionField, "enter")
-  }
   function armDelete(id) {
     if (ui.view === "detail" && ui.selectedId === String(id)) dispatch({ type: "delete" })
     else { dispatch({ type: "selectTask", id: id }); dispatch({ type: "delete" }) }
@@ -248,8 +220,9 @@ Panel {
 
   function syncNow() { return store.syncNow() }
 
-  // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): Model decides,
-  // this executes; `startFor` runs only after the focus write exits 0.
+  // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): Pomodoro.js
+  // decides, this executes; `startFor` runs only after the focus write
+  // exits 0.
   function startPomodoro(id) {
     var intent = Pomodoro.pomodoroIntent({ items: items, focus: focusModel, pomodoro: pomodoro, error: store.error, backend: backend }, id)
     switch (intent.kind) {
@@ -347,7 +320,7 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       // While an editor field is focused, keys belong to the field.
-      blocked: nameField.activeFocus || descriptionField.activeFocus
+      blocked: compose.editing
 
       onCloseRequested: root.dispatch({ type: "esc" })
       onTabRequested: function(direction) { root.dispatch({ type: "tab", direction: direction }) }
@@ -372,257 +345,26 @@ Panel {
           width: scroll.width
           spacing: Style.spacing.lg
 
-          // ==================================================== LIST / ERROR
-          // One header over both bodies (UX §4.2; §7 E4 keeps it, count off).
-          Column {
+          // The list and the cli error body share one header (UX §4.2, §7).
+          TaskList {
             visible: root.ui.view === "list" || root.ui.view === "error"
             width: parent.width
-            spacing: Style.spacing.md
-
-            Item {
-              width: parent.width
-              height: Math.max(listTitle.implicitHeight, addButton.implicitHeight)
-
-              Text {
-                id: listTitle
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Todos"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-              }
-
-              Text {
-                id: listCount
-                visible: root.ui.view === "list"
-                anchors.right: addButton.left
-                anchors.rightMargin: Style.spacing.lg
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.countLabel
-                color: root.dimForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              PanelActionButton {
-                id: addButton
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                iconText: Model.G.plus
-                tooltipText: "New todo (n)"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                enabled: !root.errored
-                onClicked: root.beginCompose()
-              }
-            }
-
-            Column {
-              visible: root.ui.view === "list"
-              width: parent.width
-              spacing: Style.spacing.md
-
-              // E5 / E14 banner above the last good list.
-              Row {
-                visible: root.banner !== ""
-                width: parent.width
-                spacing: Style.spacing.controlGap
-
-                Text {
-                  text: root.errorModel ? root.errorModel.glyph : Model.G.alert
-                  color: Color.urgent
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.subtitle
-                }
-
-                Text {
-                  width: parent.width - Style.space(24)
-                  text: root.banner
-                  textFormat: Text.PlainText
-                  wrapMode: Text.WordWrap
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.body
-                }
-              }
-
-              FocusLine {
-                width: parent.width
-                panel: root
-              }
-
-              PanelSeparator {
-                visible: root.focusLineModel !== null
-                foreground: root.contentForeground
-              }
-
-              Text {
-                visible: root.emptyCopy !== ""
-                width: parent.width
-                text: root.emptyCopy
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                topPadding: Style.spacing.md
-                bottomPadding: Style.spacing.md
-                color: root.dimForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-              }
-
-              Column {
-                width: parent.width
-                spacing: 0
-                // The last good list stays readable at 0.6 while the DB is busy.
-                opacity: root.errored ? 0.6 : 1
-
-                Repeater {
-                  model: root.listItems
-
-                  delegate: TaskRow {
-                    required property int index
-                    width: bodyColumn.width
-                    panel: root
-                    rowIndex: root.firstRow + index
-                  }
-                }
-              }
-
-              Text {
-                visible: root.ui.help
-                width: parent.width
-                text: View.helpLine("list", root.backend)
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-                color: root.dimForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            // The cli error body under the same header (UX §7 E4, E7, E8).
-            ErrorView {
-              visible: root.ui.view === "error"
-              width: parent.width
-              panel: root
-            }
+            panel: root
           }
 
-          // ========================================================= COMPOSE
-          Column {
+          ComposeView {
+            id: compose
             visible: root.ui.view === "compose"
             width: parent.width
-            spacing: Style.spacing.md
-
-            Item {
-              width: parent.width
-              height: Math.max(composeTitle.implicitHeight, backFromCompose.implicitHeight)
-
-              PanelActionButton {
-                id: backFromCompose
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                iconText: Model.G.back
-                tooltipText: "Back"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                onClicked: root.cancelCompose()
-              }
-
-              Text {
-                id: composeTitle
-                anchors.left: backFromCompose.right
-                anchors.leftMargin: Style.spacing.md
-                anchors.verticalCenter: parent.verticalCenter
-                text: "New todo"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-              }
-            }
-
-            TextField {
-              id: nameField
-              width: parent.width
-              placeholderText: "Name"
-              foreground: root.contentForeground
-              font.family: root.contentFontFamily
-
-              Keys.onPressed: function(event) {
-                if (event.key === Qt.Key_Escape) {
-                  root.cancelCompose()
-                  event.accepted = true
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                  root.composeKey(nameField, "enter")
-                  event.accepted = true
-                } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                  // Tab never escapes to the neighbouring bar panel while typing.
-                  root.dispatch({ type: "tab", direction: 1 })
-                  descriptionField.forceActiveFocus()
-                  event.accepted = true
-                }
-              }
-            }
-
-            TextField {
-              id: descriptionField
-              width: parent.width
-              placeholderText: "Description"
-              foreground: root.contentForeground
-              font.family: root.contentFontFamily
-
-              Keys.onPressed: function(event) {
-                if (event.key === Qt.Key_Escape) {
-                  root.cancelCompose()
-                  event.accepted = true
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                  root.saveCompose()
-                  event.accepted = true
-                } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-                  root.dispatch({ type: "tab", direction: -1 })
-                  nameField.forceActiveFocus()
-                  event.accepted = true
-                }
-              }
-            }
-
-            Item {
-              width: parent.width
-              height: saveRow.implicitHeight
-
-              Row {
-                id: saveRow
-                anchors.right: parent.right
-                spacing: Style.spacing.md
-
-                Button {
-                  text: "Cancel"
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  onClicked: root.cancelCompose()
-                }
-
-                Button {
-                  text: "Save"
-                  bordered: true
-                  foreground: root.contentForeground
-                  fontFamily: root.contentFontFamily
-                  onClicked: root.saveCompose()
-                }
-              }
-            }
+            panel: root
           }
 
-          // ========================================================== DETAIL
           DetailView {
             visible: root.ui.view === "detail"
             width: parent.width
             panel: root
           }
 
-          // ================================================ FOOTER / MESSAGE
           StatusFooter {
             visible: root.ui.view !== "compose" && ((root.footerModel !== null && root.ui.view !== "error") || root.message !== "")
             width: parent.width
