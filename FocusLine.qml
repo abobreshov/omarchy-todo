@@ -22,7 +22,9 @@ Item {
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
   readonly property bool timerShown: shown && model.timer !== ""
-  readonly property bool ghostShown: shown && hovered && !timerShown && model.variant !== "F0" && model.variant !== "F5"
+  // F1 and F5 (F1 plus the hint line) carry the ghost (t); the timer
+  // variants show the timer instead and F0/F6 have no task to start on.
+  readonly property bool ghostShown: shown && hovered && !timerShown && hasFocus && model.item !== null
 
   component Ghost: PanelActionButton {
     anchors.verticalCenter: parent.verticalCenter
