@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "todos": [
+    { "id": "t1", "name": "Old A", "description": "" },
+    { "id": "t2", "name": "Old B", "description": "second" }
+  ]
+}

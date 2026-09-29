@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+// Fake `todocli` for the plugin's cli-store tests (PLAN A5).
+//   - logs argv (and the TODOCLI_* env) as one JSON line to $FAKE_LOG when set
+//   - `board` replays $FAKE_BOARD (a §3.7 document) or the bundled fixture
+//   - `FAKE_EXIT=<n>` exits with that code after printing `FAKE_STDOUT`
+//     to stdout and `FAKE_STDERR` to stderr
+//   - writes print the fixture's first task as the "affected task"
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const argv = process.argv.slice(2);
+if (process.env.FAKE_LOG) {
+  const env = {};
+  for (const k of Object.keys(process.env)) if (k.startsWith("TODOCLI_")) env[k] = process.env[k];
+  fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ argv, env }) + "\n");
+}
+if (process.env.FAKE_EXIT && process.env.FAKE_EXIT !== "0") {
+  if (process.env.FAKE_STDOUT) process.stdout.write(process.env.FAKE_STDOUT);
+  if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);
+  process.exit(Number(process.env.FAKE_EXIT));
+}
+const boardPath = process.env.FAKE_BOARD || path.join(here, "..", "fixtures", "board.json");
+const doc = fs.readFileSync(boardPath, "utf8");
+let cmd = null;
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--source" || argv[i] === "--config" || argv[i] === "--db") { i++; continue; }
+  if (argv[i].startsWith("--")) continue;
+  cmd = argv[i];
+  break;
+}
+if (cmd === "board" || cmd === "list" || cmd === "render") {
+  process.stdout.write(doc);
+} else if (cmd === "sync") {
+  process.stdout.write('{"targets":[],"basecamp":null}\n');
+} else {
+  const parsed = JSON.parse(doc);
+  process.stdout.write(JSON.stringify(parsed.tasks[0] || { id: 1 }) + "\n");
+}
