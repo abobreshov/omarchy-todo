@@ -1,51 +1,123 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "Keys.js" as KeyMap
 
-// The checklist panel: a list of todos, an inline editor for new ones, and a
-// read-only detail view. The panel is a nested bar-widget surface, so the
-// BarWidget.qml entry point owns the IPC target and lifecycle forwarding
-// while this file owns the data, the views, and the save file.
+// The todo panel: the composition root. The BarWidget.qml entry point owns
+// the IPC target and lifecycle forwarding; this file picks the store
+// (`backend === "cli" ? cliStore : jsonStore`, PLAN §6.4), runs the view
+// machine through KeyMap.reduceUi, applies the actions it returns to the
+// store, and hosts the views (list, compose, detail, error). All logic lives
+// in Model.js / Keys.js / Argv.js; this file binds and forwards.
 Panel {
   id: root
 
-  moduleName: "tathagat11.checklist-todo"
-  ipcTarget: "tathagat11.checklist-todo"
+  moduleName: "abobreshov.todo"
+  ipcTarget: "abobreshov.todo"
   manageIpc: false
 
   property var anchorItem: null
   property var hostWidget: null
+  property bool vertical: false
   readonly property var barIdentity: hostWidget || root
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dimForeground: Qt.darker(contentForeground, 1.5)
 
-  // ---- state. `items` is replaced wholesale on every mutation so bindings
-  //      in the views re-evaluate without a model class.
-  property var items: []
-  property string view: "list"
-  property string selectedId: ""
-  property bool loaded: false
+  // ---- settings (PLAN §6.5, A18): every read goes through setting() and
+  //      Model.coerce; a backend change reloads from the other store.
+  readonly property var cfg: Model.coerce({
+    backend: setting("backend", "json"),
+    cliPath: setting("cliPath", "todocli"),
+    pomodoroTarget: setting("pomodoroTarget", "abobreshov.pomodoro"),
+    maxChars: setting("maxChars", 24)
+  })
+  readonly property string backend: cfg.backend
+  readonly property string cliPath: cfg.cliPath
+  readonly property string pomodoroTarget: cfg.pomodoroTarget
+  readonly property int maxChars: cfg.maxChars
+  readonly property var store: backend === "cli" ? cliStore : jsonStore
 
-  readonly property var selectedItem: {
-    for (var i = 0; i < items.length; i++)
-      if (items[i] && items[i].id === selectedId) return items[i]
-    return null
+  // ---- state
+  property var ui: KeyMap.initialUi()
+  // Rows ticked done during this panel session: id -> pre-tick status.
+  property var sessionDone: ({})
+  property string message: ""
+  property double clockNow: Date.now()
+  property var pendingPomodoroItem: null
+
+  readonly property var items: store.items
+  readonly property var focusModel: store.focus
+  readonly property var pomodoro: pomo.view
+  readonly property int openCount: Model.openCount(items)
+  readonly property string countLabel: Model.countLabel(items)
+  readonly property var listItems: Model.sortForList(Model.visibleItems(items, sessionDone), sessionDone)
+  readonly property var focusLineModel: Model.focusLine(items, focusModel, pomodoro)
+  readonly property int firstRow: focusLineModel ? 1 : 0
+  readonly property var rows: {
+    var out = []
+    if (focusLineModel) out.push({ kind: "focus", item: focusLineModel.item, selectable: focusLineModel.selectable })
+    for (var i = 0; i < listItems.length; i++) out.push({ kind: "item", item: listItems[i], selectable: true })
+    return out
   }
-  readonly property var detailItem: selectedItem || ({})
-  readonly property string countLabel: items.length + " item" + (items.length === 1 ? "" : "s")
+  readonly property var detailItem: Model.findItem(items, ui.selectedId)
+  readonly property var pill: Model.pillState({
+    backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
+    sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
+  })
+  readonly property var footerModel: backend === "cli" ? Model.footer(store.sync, clockNow, { syncing: store.syncing }) : null
+  readonly property var errorModel: backend === "cli" ? Model.errorView(store.error, { cliPath: cliPath, moduleName: moduleName, lastGoodAt: cliStore.lastGoodAt }) : null
+  readonly property string banner: backend === "cli" ? (errorModel && errorModel.banner ? errorModel.banner : "") : store.banner
+  readonly property bool cliError: backend === "cli" && store.error !== null
+  readonly property string emptyCopy: Model.emptyCopy(items) || ""
+  readonly property var storeError: store.error
+  // Change handlers below write `ui`; during construction the first
+  // evaluation of a readonly binding also emits its change signal, which
+  // would loop back into any binding that read `ui`, so they wait for
+  // Component.onCompleted.
+  property bool ready: false
+
+  // The error view replaces the list body for E4/E7/E8; E5 is a banner.
+  onStoreErrorChanged: {
+    if (!ready) return
+    if (backend === "cli" && storeError && storeError.kind !== "busy") dispatch({ type: "showError" })
+    else if (!storeError) dispatch({ type: "clearError" })
+  }
+
+  // Deferred so every setting derived from the new `settings` object (the
+  // cli path in particular) has settled before the other store loads.
+  onBackendChanged: if (ready) Qt.callLater(root.applyBackend)
+
+  function applyBackend() {
+    sessionDone = ({})
+    message = ""
+    dispatch({ type: "clearError" })
+    cliStore.active = backend === "cli"
+    store.load()
+  }
 
   // Coming back to a shut panel always lands on the list, whatever tab was
-  // left showing.
+  // left showing; done rows are hidden again (A-D7).
   onOpenedChanged: {
+    if (!ready) return
     if (!opened) {
-      view = "list"
-      selectedId = ""
+      sessionDone = ({})
+      dispatch({ type: "close" })
+    } else {
+      dispatch({ type: "open" })
+      clockNow = Date.now()
     }
+  }
+
+  Component.onCompleted: {
+    ready = true
+    cliStore.active = backend === "cli"
+    store.load()
   }
 
   function focusNameField() {
@@ -56,133 +128,256 @@ Panel {
     Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
   }
 
-  // ---- persistence. Same FileView + atomicWrites + guarded-before-write
-  //      pattern the first-party notifications service uses.
-  readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/tathagat11.checklist-todo/"
-  readonly property string savePath: stateDir + "todos.json"
-
-  function applyLoaded(raw) {
-    var next = Model.parse(raw)
-    // Skip no-op updates so this instance's own write (and the directory
-    // reload it provokes) does not churn the views on every save.
-    if (loaded && Model.serialize(next) === Model.serialize(items)) return
-    items = next
-    loaded = true
+  function showMessage(text) {
+    message = String(text || "")
+    messageTimer.restart()
   }
 
-  function saveNow() {
-    // Never write before reading: a save issued in the gap between
-    // construction and the file landing would clobber the list we are
-    // about to restore.
-    if (!loaded) return
-    saveFile.setText(Model.serialize(items))
+  // ---- the reducer
+  function reducerCtx() {
+    return {
+      rows: rows, steps: detailItem ? detailItem.plan.length : 0, backend: backend, focus: focusModel,
+      sessionDone: sessionDone, pomodoro: pomodoro, prefill: focusModel && focusModel.text ? focusModel.text : ""
+    }
   }
 
-  function scheduleSave() { saveTimer.restart() }
-
-  function reloadFromDisk() {
-    saveFile.reload()
-    // Start (or restart) the directory watch now the directory exists.
-    stateDirWatch.reload()
+  function dispatch(event) {
+    event.now = Date.now()
+    var r = KeyMap.reduceUi(ui, event, reducerCtx())
+    ui = r.ui
+    for (var i = 0; i < r.actions.length; i++) apply(r.actions[i])
   }
 
-  Process {
-    id: ensureDirProc
-    command: ["mkdir", "-p", root.stateDir]
-    onExited: Qt.callLater(root.reloadFromDisk)
+  function apply(action) {
+    switch (action.type) {
+      case "add": addItem(action.name, action.description); break
+      case "setStatus": setStatus(action.id, action.status); break
+      case "focus": setFocus(action.id); break
+      case "startPomodoro": startPomodoro(action.id); break
+      case "pausePomodoro": pomo.pause(); break
+      case "toggleStep": toggleStep(action.id, action.n); break
+      case "remove": deleteItem(action.id); break
+      case "refresh": refresh(); break
+      case "syncNow": syncNow(); break
+      case "message": showMessage(action.text); break
+      case "close": root.close(); break
+      case "switchPanel": root.switchPanel(action.direction); break
+      case "composeOpened":
+        nameField.text = action.prefill
+        descriptionField.text = ""
+        Qt.callLater(root.focusNameField)
+        break
+      default: break
+    }
   }
 
-  FileView {
-    id: saveFile
-    path: root.savePath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: root.applyLoaded(text())
-    // First run: no file yet. FileView reports that as a load failure, and
-    // without this branch `loaded` stays false forever and saving is a no-op.
-    onLoadFailed: if (!root.loaded) root.applyLoaded("")
+  // Compose fields own their text; the reducer decides what Enter/Esc/Tab do.
+  function composeKey(field, kind) {
+    dispatch({ type: "text", text: field.text })
+    dispatch({ type: kind })
+    if (ui.view !== "compose") {
+      nameField.text = ""
+      descriptionField.text = ""
+      focusKeyCatcher()
+    } else if (ui.composeField === "description") descriptionField.forceActiveFocus()
+    else nameField.forceActiveFocus()
   }
 
-  // Watch the directory rather than the file: the file does not exist on the
-  // first run, and atomic writes replace its inode, so a file watch would go
-  // quiet after the first write. The directory always exists and sees every
-  // rewrite, which is what keeps both monitors' panels in step.
-  FileView {
-    id: stateDirWatch
-    path: root.stateDir
-    watchChanges: true
-    printErrors: false
-    onFileChanged: dirReloadTimer.restart()
+  function hoverRow(index) { dispatch({ type: "hover", index: index }) }
+  function openDetail(id) { dispatch({ type: "selectTask", id: id }) }
+  function activateFocusLine() {
+    dispatch({ type: "hover", index: 0 })
+    dispatch({ type: "enter" })
+  }
+  function backToList() { dispatch({ type: "esc" }) }
+  function beginCompose() { dispatch({ type: "key", key: "n" }) }
+  function cancelCompose() { composeKey(nameField, "esc") }
+  function saveCompose() {
+    dispatch({ type: "text", text: nameField.text })
+    if (ui.composeField === "name") {
+      dispatch({ type: "enter" })
+      if (ui.composeField !== "description") { focusNameField(); return }
+    }
+    composeKey(descriptionField, "enter")
+  }
+  function armDelete(id) {
+    if (ui.view === "detail" && ui.selectedId === String(id)) dispatch({ type: "delete" })
+    else { dispatch({ type: "selectTask", id: id }); dispatch({ type: "delete" }) }
   }
 
-  Timer {
-    id: dirReloadTimer
-    interval: 150
-    repeat: false
-    onTriggered: if (root.loaded) saveFile.reload()
+  // Mouse twins of the keys (UX §4.6); each calls the same function.
+  function rowKey(id, key) {
+    var it = Model.findItem(items, id)
+    var action = KeyMap.keyAction("list", key, { item: it, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: sessionDone, pomodoro: pomodoro })
+    if (action) apply(action)
+  }
+  function tickRow(id) { rowKey(id, "d") }
+  function toggleStepAt(n) { if (detailItem) toggleStep(detailItem.id, n) }
+
+  function markSessionDone(id, previous) {
+    var next = {}
+    for (var k in sessionDone) next[k] = sessionDone[k]
+    next[String(id)] = previous
+    sessionDone = next
   }
 
-  Timer {
-    id: saveTimer
-    interval: 300
-    repeat: false
-    onTriggered: root.saveNow()
+  function dropSessionDone(id) {
+    if (sessionDone[String(id)] === undefined) return
+    var next = {}
+    for (var k in sessionDone) if (k !== String(id)) next[k] = sessionDone[k]
+    sessionDone = next
   }
 
-  Component.onCompleted: ensureDirProc.running = true
-
-  // ---- operations
+  // ---- operations: the IPC functions and the keys call these
   function addItem(name, description) {
-    var cleanName = Model.squish(name)
-    if (cleanName === "") return "empty"
-    var next = items.slice()
-    next.push({ id: Model.makeId(), name: cleanName, description: Model.squish(description) })
-    items = next
-    scheduleSave()
-    return cleanName
+    return store.add(name, description)
   }
 
   function deleteItem(id) {
-    var next = []
-    for (var i = 0; i < items.length; i++)
-      if (items[i] && items[i].id !== id) next.push(items[i])
-    items = next
-    if (selectedId === id) selectedId = ""
-    scheduleSave()
+    var reply = store.remove(id)
+    if (reply.indexOf("unavailable") === 0) return reply
+    dropSessionDone(id)
+    return "ok"
   }
 
-  function openDetail(id) {
-    selectedId = id
-    view = "detail"
+  function setStatus(id, status) {
+    var it = Model.findItem(items, id)
+    var previous = it ? it.status : "todo"
+    var reply = store.setStatus(id, status)
+    if (reply !== "ok") return reply
+    if (status === "done") {
+      if (previous !== "done") markSessionDone(id, previous)
+      if (pomodoro.phase !== "idle" && pomodoro.taskId === String(id)) showMessage(Model.MSG_DONE_ATTACHED)
+    } else dropSessionDone(id)
+    return "ok"
   }
 
-  function beginCompose() {
-    if (nameField) nameField.text = ""
-    if (descriptionField) descriptionField.text = ""
-    view = "compose"
-    Qt.callLater(root.focusNameField)
+  function setFocus(idOrClear) {
+    return store.setFocus(idOrClear, null)
   }
 
-  function cancelCompose() {
-    view = "list"
-    focusKeyCatcher()
+  function toggleStep(id, n) {
+    return store.toggleStep(id, n)
   }
 
-  function saveCompose() {
-    if (addItem(nameField.text, descriptionField.text) === "empty") {
-      focusNameField()
-      return
+  function openTask(id) {
+    var it = Model.findItem(items, id)
+    root.open()
+    if (!it) {
+      var text = Model.msgTaskNotFound(id)
+      showMessage(text)
+      return text
     }
-    nameField.text = ""
-    descriptionField.text = ""
-    view = "list"
-    focusKeyCatcher()
+    dispatch({ type: "selectTask", id: it.id })
+    return "ok"
   }
 
-  function backToList() {
-    view = "list"
-    focusKeyCatcher()
+  function refresh() {
+    store.refresh()
+    clockNow = Date.now()
+    return "ok"
+  }
+
+  function syncNow() {
+    var reply = store.syncNow()
+    if (backend !== "cli") showMessage(reply)
+    return reply
+  }
+
+  // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): focus first, and
+  // `startFor` only after the focus write exits 0; the attached task toggles
+  // pause/resume; a free-text focus starts a label-only pomodoro.
+  function startPomodoro(id) {
+    var key = String(id)
+    var it = null
+    if (key === "focus") {
+      it = Model.focusTask(items, focusModel)
+      if (!it) {
+        if (focusModel && focusModel.text) {
+          pendingPomodoroItem = null
+          pomo.startFor("", focusModel.text)
+          return "ok"
+        }
+        return "no focus"
+      }
+    } else {
+      it = Model.findItem(items, key)
+      if (!it) return "unknown id"
+    }
+    if (pomodoro.phase !== "idle" && pomodoro.taskId === it.id) {
+      pomo.pause()
+      return "ok"
+    }
+    if (cliError) return Model.unavailable(store.error)
+    var task = it
+    var reply = store.setFocus(task.id, function(err) {
+      if (err) return
+      pendingPomodoroItem = task
+      pomo.startFor(task.id, task.name)
+    })
+    if (reply !== "ok") {
+      showMessage(reply === "refused: done" ? Model.msgDoneRow(task, backend) : reply)
+      return reply
+    }
+    return "ok"
+  }
+
+  function dump() {
+    return JSON.stringify(Model.dumpView({
+      backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
+      items: items, focus: focusModel, sessionDone: sessionDone, banner: banner === "" ? null : banner,
+      footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
+    }))
+  }
+
+  // ---- stores and links
+  JsonStore { id: jsonStore }
+
+  CliStore {
+    id: cliStore
+    cliPath: root.cliPath
+    opened: root.opened
+  }
+
+  PomodoroLink {
+    id: pomo
+    target: root.pomodoroTarget
+    opened: root.opened
+    onResult: function(r) {
+      if (r.ok) {
+        if (r.word === "retargeted" && root.pendingPomodoroItem)
+          root.showMessage(Model.msgPomodoroMoved(root.pendingPomodoroItem, root.pomodoro.remaining, root.backend))
+      } else if (r.kind === "missing") root.showMessage(Model.msgPomodoroMissing(root.pomodoroTarget))
+      else if (r.kind === "old") root.showMessage(Model.msgPomodoroOld(root.pomodoroTarget))
+      else root.showMessage(Model.msgPomodoroNotStarted(r.text))
+      root.pendingPomodoroItem = null
+    }
+  }
+
+  Connections {
+    target: root.store
+    function onFailed(error) { root.showMessage(Model.msgNotSaved(error)) }
+    function onSyncFinished(result) { if (!result.ok && result.message) root.showMessage(result.message) }
+  }
+
+  Timer {
+    id: messageTimer
+    interval: 4000
+    repeat: false
+    onTriggered: root.message = ""
+  }
+
+  // One second tick while open: the focus-line timer, the footer's relative
+  // times and the armed-delete timeout.
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.opened
+    onTriggered: {
+      root.clockNow = Date.now()
+      pomo.tick()
+      if (root.ui.armedId !== "") root.dispatch({ type: "tick" })
+    }
   }
 
   KeyboardPanel {
@@ -202,17 +397,14 @@ Panel {
       // While an editor field is focused, keys belong to the field.
       blocked: nameField.activeFocus || descriptionField.activeFocus
 
-      onCloseRequested: {
-        if (root.view === "list") root.close()
-        else if (root.view === "compose") root.cancelCompose()
-        else root.backToList()
-      }
-
-      // `n` (or `+`) starts a new todo without reaching for the mouse.
-      onTextKey: function(t) {
-        if (root.view === "list" && (t === "n" || t === "N" || t === "+"))
-          root.beginCompose()
-      }
+      onCloseRequested: root.dispatch({ type: "esc" })
+      onTabRequested: function(direction) { root.dispatch({ type: "tab", direction: direction }) }
+      onMoveRequested: function(dx, dy) { root.dispatch({ type: "move", dx: dx, dy: dy }) }
+      // Enter emits returnRequested + activateRequested, Space only the
+      // latter; both open a row or toggle a step, so one handler serves.
+      onActivateRequested: root.dispatch({ type: "enter" })
+      onDeleteRequested: root.dispatch({ type: "delete" })
+      onTextKey: function(t) { root.dispatch({ type: "key", key: t }) }
 
       Flickable {
         id: scroll
@@ -230,7 +422,7 @@ Panel {
 
           // ============================================================ LIST
           Column {
-            visible: root.view === "list"
+            visible: root.ui.view === "list"
             width: parent.width
             spacing: Style.spacing.md
 
@@ -264,18 +456,53 @@ Panel {
                 id: addButton
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                iconText: "󰐕"
-                tooltipText: "New todo"
+                iconText: Model.G.plus
+                tooltipText: "New todo (n)"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
+                enabled: !root.cliError
                 onClicked: root.beginCompose()
               }
             }
 
-            Text {
-              visible: root.items.length === 0
+            // E5 / E14 banner above the last good list.
+            Row {
+              visible: root.banner !== ""
               width: parent.width
-              text: "Nothing here yet. Press + to add a todo."
+              spacing: Style.spacing.controlGap
+
+              Text {
+                text: root.backend === "cli" ? Model.G.lock : Model.G.alert
+                color: Color.urgent
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.subtitle
+              }
+
+              Text {
+                width: parent.width - Style.space(24)
+                text: root.banner
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
+            FocusLine {
+              width: parent.width
+              panel: root
+            }
+
+            PanelSeparator {
+              visible: root.focusLineModel !== null
+              foreground: root.contentForeground
+            }
+
+            Text {
+              visible: root.emptyCopy !== ""
+              width: parent.width
+              text: root.emptyCopy
               textFormat: Text.PlainText
               wrapMode: Text.WordWrap
               topPadding: Style.spacing.md
@@ -285,83 +512,39 @@ Panel {
               font.pixelSize: Style.font.body
             }
 
-            Repeater {
-              model: root.items
+            Column {
+              width: parent.width
+              spacing: 0
+              // The last good list stays readable at 0.6 while the DB is busy.
+              opacity: root.banner !== "" && root.backend === "cli" ? 0.6 : 1
 
-              delegate: Item {
-                id: rowItem
-                required property var modelData
+              Repeater {
+                model: root.listItems
 
-                width: bodyColumn.width
-                height: Math.max(rowCheck.implicitHeight, rowTitle.implicitHeight) + Style.spacing.lg
-                property bool checkHovered: false
-                readonly property bool rowHovered: rowHover.containsMouse
-
-                Rectangle {
-                  anchors.fill: parent
-                  radius: Style.cornerRadius
-                  color: rowItem.rowHovered
-                    ? Style.hoverFillFor(root.contentForeground, Color.accent)
-                    : "transparent"
-                }
-
-                // Declared before the checkbox so the checkbox's own handler
-                // sits on top and clicking the box deletes rather than opens.
-                MouseArea {
-                  id: rowHover
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.openDetail(rowItem.modelData.id)
-                }
-
-                Text {
-                  id: rowCheck
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.spacing.lg
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: "󰄱"
-                  // Ticking is destructive here, so the box warns in the
-                  // urgent colour only under its own pointer.
-                  color: rowItem.checkHovered
-                    ? Color.urgent
-                    : (rowItem.rowHovered ? root.contentForeground : root.dimForeground)
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.subtitle
-
-                  Behavior on color { ColorAnimation { duration: 80 } }
-
-                  MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -Style.spacing.sm
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onContainsMouseChanged: rowItem.checkHovered = containsMouse
-                    onClicked: root.deleteItem(rowItem.modelData.id)
-                  }
-                }
-
-                Text {
-                  id: rowTitle
-                  anchors.left: rowCheck.right
-                  anchors.leftMargin: Style.spacing.controlGap
-                  anchors.right: parent.right
-                  anchors.rightMargin: Style.spacing.lg
-                  anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.name
-                  textFormat: Text.PlainText
-                  elide: Text.ElideRight
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.body
+                delegate: TaskRow {
+                  required property int index
+                  width: bodyColumn.width
+                  panel: root
+                  rowIndex: root.firstRow + index
                 }
               }
+            }
+
+            Text {
+              visible: root.ui.help
+              width: parent.width
+              text: Model.helpLine("list", root.backend)
+              textFormat: Text.PlainText
+              wrapMode: Text.WordWrap
+              color: root.dimForeground
+              font.family: root.contentFontFamily
+              font.pixelSize: Style.font.caption
             }
           }
 
           // ========================================================= COMPOSE
           Column {
-            visible: root.view === "compose"
+            visible: root.ui.view === "compose"
             width: parent.width
             spacing: Style.spacing.md
 
@@ -373,7 +556,7 @@ Panel {
                 id: backFromCompose
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                iconText: "󰁍"
+                iconText: Model.G.back
                 tooltipText: "Back"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
@@ -405,6 +588,11 @@ Panel {
                   root.cancelCompose()
                   event.accepted = true
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                  root.composeKey(nameField, "enter")
+                  event.accepted = true
+                } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                  // Tab never escapes to the neighbouring bar panel while typing.
+                  root.dispatch({ type: "tab", direction: 1 })
                   descriptionField.forceActiveFocus()
                   event.accepted = true
                 }
@@ -424,6 +612,10 @@ Panel {
                   event.accepted = true
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                   root.saveCompose()
+                  event.accepted = true
+                } else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
+                  root.dispatch({ type: "tab", direction: -1 })
+                  nameField.forceActiveFocus()
                   event.accepted = true
                 }
               }
@@ -457,55 +649,24 @@ Panel {
           }
 
           // ========================================================== DETAIL
-          Column {
-            visible: root.view === "detail"
+          DetailView {
+            visible: root.ui.view === "detail"
             width: parent.width
-            spacing: Style.spacing.md
+            panel: root
+          }
 
-            Item {
-              width: parent.width
-              height: Math.max(detailTitle.implicitHeight, backFromDetail.implicitHeight)
+          // =========================================================== ERROR
+          ErrorView {
+            visible: root.ui.view === "error"
+            width: parent.width
+            panel: root
+          }
 
-              PanelActionButton {
-                id: backFromDetail
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                iconText: "󰁍"
-                tooltipText: "Back"
-                foreground: root.contentForeground
-                fontFamily: root.contentFontFamily
-                onClicked: root.backToList()
-              }
-
-              Text {
-                id: detailTitle
-                anchors.left: backFromDetail.right
-                anchors.leftMargin: Style.spacing.md
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.detailItem.name || ""
-                textFormat: Text.PlainText
-                elide: Text.ElideRight
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-              }
-            }
-
-            Text {
-              width: parent.width
-              text: (root.detailItem.description && root.detailItem.description !== "")
-                ? root.detailItem.description
-                : "No description."
-              textFormat: Text.PlainText
-              wrapMode: Text.WordWrap
-              color: (root.detailItem.description && root.detailItem.description !== "")
-                ? root.contentForeground
-                : root.dimForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-            }
+          // ================================================ FOOTER / MESSAGE
+          StatusFooter {
+            visible: root.ui.view !== "compose" && ((root.backend === "cli" && root.ui.view !== "error") || root.message !== "")
+            width: parent.width
+            panel: root
           }
         }
       }
