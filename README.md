@@ -176,24 +176,47 @@ rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 
 ## Development
 
-All logic lives in `Model.js`, `Keys.js` and `Argv.js` (`.pragma library`);
-the QML files bind and forward. `Model.reduce(doc, action)` is the one
-mutation API: the keys emit an action (`add`, `setStatus`, `focus`,
-`toggleStep`, `remove`), `Argv.forAction` maps it to a `todocli` command and
-both stores apply it through `perform(action, done)`. `TodoStore.qml` is the
-store interface; `JsonStore.qml` and `CliStore.qml` extend it and answer
-alike, so `Panel.qml` never asks which backend it is. `ArgvProcess.qml`
-runs every external command as an argv list (never a shell string) and
-reports a binary that cannot be spawned. Every `Text` that shows user text
-sets `textFormat: Text.PlainText`; the pill and tooltip text (kit-owned)
-goes through `Model.pillLabel`/`Model.tooltip`, which turn `<`/`>` into
-`‹`/`›`.
+All logic lives in seven `.pragma library` files, one concern each; the QML
+files bind and forward.
 
-Size: the plugin is about 3,000 lines of QML and JS against the 1,800 the
+| Library | Holds |
+| --- | --- |
+| `Model.js` | The item model and the shared vocabulary: the glyphs, `DEFAULTS` and `coerce` (settings), text and time formatting, the item normaliser, the focus link, `isAttached`/`isFocused`. |
+| `Store.js` | The json document (version 2, reads version 1), the `board --json` mapping (`fromCli`) and the sync block, the optimistic id map, and `reduce(doc, action)`, the one mutation API. |
+| `Errors.js` | The cli error kinds (E4, E5, E7, E8) in one table: `classifyExit`, `unavailable`, `errorView`, `msgNotSaved`. |
+| `View.js` | View decisions and copy: list order and the session's done rows, `pillState`, `footer`, `focusLine`, `statusLine`/`actionTooltips`, the transients, `dumpView`. |
+| `Pomodoro.js` | The hand-off: `pomodoroIntent`, `pomodoroMessage`, `classifyShell`, `pomodoroView`. |
+| `Keys.js` | `keyAction` (the key map) and `reduceUi` (the view machine: list, compose, detail, error, cursor, armed delete). |
+| `Argv.js` | The argv builders for `todocli`, `omarchy-shell` and `install`. |
+
+Libraries import each other with `.import "X.js" as X` (Model ← Store ←
+Errors ← View ← Pomodoro; Keys uses Model and View; Argv uses Model), and
+`tests/qml-js-loader.mjs` resolves the same lines under Node.
+`Store.reduce(doc, action)` is the one mutation API: the keys emit an action
+(`add`, `setStatus`, `focus`, `toggleStep`, `remove`), `Argv.forAction` maps
+it to a `todocli` command and both stores apply it through
+`perform(action, done)`.
+
+QML: `BarWidget.qml` (the pill and the IPC handler), `Panel.qml` (the
+composition root: settings, the store switch, the reducer wiring and the
+operations the IPC functions, keys and buttons call), the views
+`TaskList.qml` (header, banner, focus line, rows, help line and the error
+body), `ComposeView.qml`, `DetailView.qml`, `FocusLine.qml`, `TaskRow.qml`,
+`ErrorView.qml`, `StatusFooter.qml`, the stores `TodoStore.qml` (the
+interface), `JsonStore.qml` and `CliStore.qml`, which extend it and answer
+alike so `Panel.qml` never asks which backend it is, `PomodoroLink.qml` and
+`ArgvProcess.qml`, which runs every external command as an argv list (never
+a shell string) and reports a binary that cannot be spawned. Every `Text`
+that shows user text sets `textFormat: Text.PlainText`; the pill and tooltip
+text (kit-owned) goes through `Model.pillLabel`/`Model.tooltip`, which turn
+`<`/`>` into `‹`/`›`.
+
+Size: the plugin is about 3,500 lines of QML and JS against the 1,800 the
 plan budgeted (upstream is ~690). The difference is the UX surface, not extra
 features: the focus line with its seven variants, the detail view, the sync
 footer, the error view and the keyboard reducer each carry their own states
-and copy. Recorded as a deviation.
+and copy. Recorded as a deviation. No file exceeds 500 lines: a file that
+grows past that is split by responsibility, never waived.
 
 One `IpcHandler` per widget instance is the shell's own pattern. Quickshell
 0.3.1 logs `WARN … Handler was registered but will not be used because

@@ -46,16 +46,18 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   `refresh`, `syncNow`, `dump`. Upstream `add`, `remove`, `status`,
   `open/close/show/hide/toggle` keep their arities and replies.
 - Settings `backend`, `cliPath`, `pomodoroTarget`, `maxChars`.
-- `node --test` suite for `Model.js`, `Keys.js`, `Argv.js` (≥ 95 % lines),
-  `tools/qmllint.sh` with a warning baseline, a fake `todocli` and
-  `tests/smoke.sh`, a headless IPC smoke test in a scratch Quickshell instance.
+- `node --test` suite for the `.js` libraries (`Model`, `Store`, `Errors`,
+  `View`, `Pomodoro`, `Keys`, `Argv`; ≥ 95 % lines), `tools/qmllint.sh` with
+  a warning baseline, a fake `todocli` and `tests/smoke.sh`, a headless IPC
+  smoke test in a scratch Quickshell instance.
 
 ### Notes
 
-- Size: about 3,000 lines of QML and JS against the 1,800 the plan
+- Size: about 3,500 lines of QML and JS against the 1,800 the plan
   budgeted. The overrun is the UX surface (focus line variants, detail view,
   sync footer, error view, keyboard reducer), not extra features; recorded as
-  a deviation.
+  a deviation. No file exceeds 500 lines (one library or component per
+  concern).
 - `todocli import --omarchy` (the one-shot json → cli import) arrives with
   the next `todocli` release; the README says so.
 
