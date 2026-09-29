@@ -157,7 +157,9 @@ sleep 0.6
 check "E14 the new file holds the item" "$(python3 -c 'import json,sys; print([t["name"] for t in json.load(open(sys.argv[1]))["todos"]])' "$own")" "['Found']"
 stop
 
-if grep -q "WARN.*Panel.qml\|WARN.*BarWidget.qml\|Binding loop\|SMOKE load error" "$scratch/qs.log"; then
+# Any warning that names one of the plugin's files fails the run (a QML
+# error in a view shows up here, since the panel's content is built eagerly).
+if grep -q "WARN.*$here/\|Binding loop\|SMOKE load error" "$scratch/qs.log"; then
   echo "FAIL qs log has plugin warnings:"; grep "WARN\|SMOKE" "$scratch/qs.log"; fails=$((fails + 1))
 fi
 

@@ -369,9 +369,10 @@ Panel {
           width: scroll.width
           spacing: Style.spacing.lg
 
-          // ============================================================ LIST
+          // ==================================================== LIST / ERROR
+          // One header over both bodies (UX §4.2; §7 E4 keeps it, count off).
           Column {
-            visible: root.ui.view === "list"
+            visible: root.ui.view === "list" || root.ui.view === "error"
             width: parent.width
             spacing: Style.spacing.md
 
@@ -392,6 +393,7 @@ Panel {
 
               Text {
                 id: listCount
+                visible: root.ui.view === "list"
                 anchors.right: addButton.left
                 anchors.rightMargin: Style.spacing.lg
                 anchors.verticalCenter: parent.verticalCenter
@@ -414,80 +416,93 @@ Panel {
               }
             }
 
-            // E5 / E14 banner above the last good list.
-            Row {
-              visible: root.banner !== ""
+            Column {
+              visible: root.ui.view === "list"
               width: parent.width
-              spacing: Style.spacing.controlGap
+              spacing: Style.spacing.md
 
-              Text {
-                text: root.errorModel ? root.errorModel.glyph : Model.G.alert
-                color: Color.urgent
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.subtitle
+              // E5 / E14 banner above the last good list.
+              Row {
+                visible: root.banner !== ""
+                width: parent.width
+                spacing: Style.spacing.controlGap
+
+                Text {
+                  text: root.errorModel ? root.errorModel.glyph : Model.G.alert
+                  color: Color.urgent
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.subtitle
+                }
+
+                Text {
+                  width: parent.width - Style.space(24)
+                  text: root.banner
+                  textFormat: Text.PlainText
+                  wrapMode: Text.WordWrap
+                  color: root.contentForeground
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
+                }
+              }
+
+              FocusLine {
+                width: parent.width
+                panel: root
+              }
+
+              PanelSeparator {
+                visible: root.focusLineModel !== null
+                foreground: root.contentForeground
               }
 
               Text {
-                width: parent.width - Style.space(24)
-                text: root.banner
+                visible: root.emptyCopy !== ""
+                width: parent.width
+                text: root.emptyCopy
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
-                color: root.contentForeground
+                topPadding: Style.spacing.md
+                bottomPadding: Style.spacing.md
+                color: root.dimForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
               }
-            }
 
-            FocusLine {
-              width: parent.width
-              panel: root
-            }
+              Column {
+                width: parent.width
+                spacing: 0
+                // The last good list stays readable at 0.6 while the DB is busy.
+                opacity: root.errored ? 0.6 : 1
 
-            PanelSeparator {
-              visible: root.focusLineModel !== null
-              foreground: root.contentForeground
-            }
+                Repeater {
+                  model: root.listItems
 
-            Text {
-              visible: root.emptyCopy !== ""
-              width: parent.width
-              text: root.emptyCopy
-              textFormat: Text.PlainText
-              wrapMode: Text.WordWrap
-              topPadding: Style.spacing.md
-              bottomPadding: Style.spacing.md
-              color: root.dimForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-            }
-
-            Column {
-              width: parent.width
-              spacing: 0
-              // The last good list stays readable at 0.6 while the DB is busy.
-              opacity: root.errored ? 0.6 : 1
-
-              Repeater {
-                model: root.listItems
-
-                delegate: TaskRow {
-                  required property int index
-                  width: bodyColumn.width
-                  panel: root
-                  rowIndex: root.firstRow + index
+                  delegate: TaskRow {
+                    required property int index
+                    width: bodyColumn.width
+                    panel: root
+                    rowIndex: root.firstRow + index
+                  }
                 }
+              }
+
+              Text {
+                visible: root.ui.help
+                width: parent.width
+                text: Model.helpLine("list", root.backend)
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                color: root.dimForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
               }
             }
 
-            Text {
-              visible: root.ui.help
+            // The cli error body under the same header (UX §7 E4, E7, E8).
+            ErrorView {
+              visible: root.ui.view === "error"
               width: parent.width
-              text: Model.helpLine("list", root.backend)
-              textFormat: Text.PlainText
-              wrapMode: Text.WordWrap
-              color: root.dimForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.caption
+              panel: root
             }
           }
 
@@ -600,13 +615,6 @@ Panel {
           // ========================================================== DETAIL
           DetailView {
             visible: root.ui.view === "detail"
-            width: parent.width
-            panel: root
-          }
-
-          // =========================================================== ERROR
-          ErrorView {
-            visible: root.ui.view === "error"
             width: parent.width
             panel: root
           }

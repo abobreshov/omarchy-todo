@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 import qs.Ui
@@ -10,23 +11,38 @@ Item {
   id: row
 
   required property var modelData
-  property var panel: null
+  required property var panel
   property int rowIndex: 0
 
-  readonly property bool current: panel !== null && panel.ui.cursor === rowIndex
-  readonly property bool armed: panel !== null && panel.ui.armedId === modelData.id
+  readonly property bool current: panel.ui.cursor === rowIndex
+  readonly property bool armed: panel.ui.armedId === modelData.id
   readonly property bool isDone: modelData.status === "done"
-  readonly property bool isDoing: modelData.status === "doing"
-  readonly property bool isFocus: panel !== null && Model.isFocused(panel.focusModel, modelData.id)
-  readonly property bool attached: panel !== null && Model.isAttached(panel.pomodoro, modelData.id)
-  readonly property bool disabled: panel !== null && panel.errored
+  readonly property bool isFocus: Model.isFocused(panel.focusModel, modelData.id)
+  readonly property bool attached: Model.isAttached(panel.pomodoro, modelData.id)
   readonly property string progress: Model.planProgress(modelData)
-  readonly property color fg: panel ? panel.contentForeground : Color.foreground
-  readonly property color dim: panel ? panel.dimForeground : Qt.darker(Color.foreground, 1.5)
-  readonly property string family: panel ? panel.contentFontFamily : Style.font.family
-
+  readonly property color fg: panel.contentForeground
+  readonly property color dim: panel.dimForeground
+  readonly property string family: panel.contentFontFamily
   property bool checkHovered: false
   readonly property bool rowHovered: rowHover.containsMouse
+
+  // The right cluster's marks and ghost buttons share one look.
+  component Mark: Text {
+    anchors.verticalCenter: parent.verticalCenter
+    color: row.dim
+    font.family: row.family
+    font.pixelSize: Style.font.caption
+  }
+
+  component Ghost: PanelActionButton {
+    anchors.verticalCenter: parent.verticalCenter
+    size: Style.space(24)
+    foreground: row.dim
+    hoverColor: Color.accent
+    fontFamily: row.family
+    fontSize: Style.font.caption
+    enabled: !row.panel.errored
+  }
 
   height: Math.max(rowCheck.implicitHeight, rowTitle.implicitHeight, cluster.implicitHeight) + Style.spacing.lg
 
@@ -45,8 +61,8 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onContainsMouseChanged: if (containsMouse && row.panel) row.panel.hoverRow(row.rowIndex)
-    onClicked: if (row.panel) row.panel.openDetail(row.modelData.id)
+    onContainsMouseChanged: if (containsMouse) row.panel.hoverRow(row.rowIndex)
+    onClicked: row.panel.openDetail(row.modelData.id)
   }
 
   Text {
@@ -57,7 +73,7 @@ Item {
     text: Model.statusGlyph(row.modelData.status)
     // Ticking is no longer destructive: the box uses the accent under its
     // own pointer, and doing rows carry the accent always.
-    color: row.checkHovered || row.isDoing
+    color: row.checkHovered || row.modelData.status === "doing"
       ? Color.accent
       : (row.rowHovered && !row.isDone ? row.fg : row.dim)
     font.family: row.family
@@ -71,7 +87,7 @@ Item {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onContainsMouseChanged: row.checkHovered = containsMouse
-      onClicked: if (row.panel && !row.disabled) row.panel.tickRow(row.modelData.id)
+      onClicked: if (!row.panel.errored) row.panel.tickRow(row.modelData.id)
     }
   }
 
@@ -100,68 +116,23 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.spacing.sm
 
-    Text {
-      visible: row.armed
-      anchors.verticalCenter: parent.verticalCenter
-      text: "x again to delete"
-      color: Color.urgent
-      font.family: row.family
-      font.pixelSize: Style.font.caption
-    }
+    Mark { visible: row.armed; text: "x again to delete"; color: Color.urgent }
+    Mark { visible: !row.armed && row.progress !== ""; text: row.progress }
+    Mark { visible: !row.armed && row.isFocus; text: Model.G.focus; color: Color.accent }
+    Mark { visible: !row.armed && row.attached; text: Model.G.pomodoro; color: row.panel.pomodoro.running ? Color.accent : row.dim }
 
-    Text {
-      visible: !row.armed && row.progress !== ""
-      anchors.verticalCenter: parent.verticalCenter
-      text: row.progress
-      color: row.dim
-      font.family: row.family
-      font.pixelSize: Style.font.caption
-    }
-
-    Text {
-      visible: !row.armed && row.isFocus
-      anchors.verticalCenter: parent.verticalCenter
-      text: Model.G.focus
-      color: Color.accent
-      font.family: row.family
-      font.pixelSize: Style.font.caption
-    }
-
-    Text {
-      visible: !row.armed && row.attached
-      anchors.verticalCenter: parent.verticalCenter
-      text: Model.G.pomodoro
-      color: row.panel && row.panel.pomodoro.running ? Color.accent : row.dim
-      font.family: row.family
-      font.pixelSize: Style.font.caption
-    }
-
-    PanelActionButton {
+    Ghost {
       visible: !row.armed && row.rowHovered && !row.isFocus && !row.isDone
-      anchors.verticalCenter: parent.verticalCenter
       iconText: Model.G.focus
       tooltipText: "Set focus (f)"
-      size: Style.space(24)
-      foreground: row.dim
-      hoverColor: Color.accent
-      fontFamily: row.family
-      fontSize: Style.font.caption
-      enabled: !row.disabled
-      onClicked: if (row.panel) row.panel.rowKey(row.modelData.id, "f")
+      onClicked: row.panel.rowKey(row.modelData.id, "f")
     }
 
-    PanelActionButton {
+    Ghost {
       visible: !row.armed && row.rowHovered && !row.attached && !row.isDone
-      anchors.verticalCenter: parent.verticalCenter
       iconText: Model.G.pomodoro
       tooltipText: "Start pomodoro (p)"
-      size: Style.space(24)
-      foreground: row.dim
-      hoverColor: Color.accent
-      fontFamily: row.family
-      fontSize: Style.font.caption
-      enabled: !row.disabled
-      onClicked: if (row.panel) row.panel.rowKey(row.modelData.id, "p")
+      onClicked: row.panel.rowKey(row.modelData.id, "p")
     }
   }
 }

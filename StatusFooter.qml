@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "Model.js" as Model
 
 // The cli-mode footer (UX §4.7) and the transient message slot (UX §4.7):
 // one caption line at the bottom; a message replaces the footer text for
@@ -9,15 +8,14 @@ import "Model.js" as Model
 Item {
   id: footer
 
-  property var panel: null
-  readonly property var model: panel ? panel.footerModel : null
-  readonly property string message: panel ? panel.message : ""
+  required property var panel
+  readonly property var model: panel.footerModel
+  readonly property string message: panel.message
   readonly property bool showingMessage: message !== ""
   readonly property bool urgent: !showingMessage && model !== null && model.urgent
   readonly property bool clickable: !showingMessage && model !== null && model.action !== null
-  readonly property color fg: panel ? panel.contentForeground : Color.foreground
-  readonly property color dim: panel ? panel.dimForeground : Qt.darker(Color.foreground, 1.5)
-  readonly property string family: panel ? panel.contentFontFamily : Style.font.family
+  readonly property color dim: panel.dimForeground
+  readonly property string family: panel.contentFontFamily
 
   height: Math.max(glyph.implicitHeight, label.implicitHeight) + Style.spacing.sm
 
@@ -26,7 +24,7 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: footer.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-    onClicked: if (footer.clickable && footer.panel) footer.panel.syncNow()
+    onClicked: if (footer.clickable) footer.panel.syncNow()
 
     PanelToolTip {
       visible: !footer.showingMessage && footer.model !== null && footer.model.tooltip !== "" && area.containsMouse
@@ -57,7 +55,7 @@ Item {
     text: footer.showingMessage ? footer.message : (footer.model ? footer.model.text : "")
     textFormat: Text.PlainText
     elide: Text.ElideRight
-    color: footer.urgent ? Color.urgent : (footer.showingMessage ? footer.fg : footer.dim)
+    color: footer.urgent ? Color.urgent : (footer.showingMessage ? footer.panel.contentForeground : footer.dim)
     font.family: footer.family
     font.pixelSize: Style.font.caption
   }

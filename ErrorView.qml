@@ -1,48 +1,31 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// The cli-mode error view (UX §7 E4, E7, E8): replaces the list body; `r`
-// retries, Esc closes. The panel never falls back to the json file.
+// The cli-mode error body (UX §7 E4, E7, E8) under the panel's list
+// header: `r` retries, Esc closes. The panel never falls back to the json
+// file.
 Column {
   id: view
 
-  property var panel: null
-  readonly property var model: panel ? panel.errorModel : null
+  required property var panel
+  readonly property var model: panel.errorModel
   readonly property bool hasModel: model !== null && model.title !== null
-  readonly property color fg: panel ? panel.contentForeground : Color.foreground
-  readonly property color dim: panel ? panel.dimForeground : Qt.darker(Color.foreground, 1.5)
-  readonly property string family: panel ? panel.contentFontFamily : Style.font.family
+  readonly property color fg: panel.contentForeground
+  readonly property string family: panel.contentFontFamily
+
+  component Body: Text {
+    width: parent.width
+    textFormat: Text.PlainText
+    wrapMode: Text.WordWrap
+    color: view.fg
+    font.family: view.family
+    font.pixelSize: Style.font.body
+  }
 
   spacing: Style.spacing.md
-
-  Item {
-    width: parent.width
-    height: Math.max(errorTitle.implicitHeight, addButton.implicitHeight)
-
-    Text {
-      id: errorTitle
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: "Todos"
-      color: view.fg
-      font.family: view.family
-      font.pixelSize: Style.font.title
-      font.bold: true
-    }
-
-    PanelActionButton {
-      id: addButton
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      iconText: Model.G.plus
-      tooltipText: "New todo (n)"
-      foreground: view.fg
-      fontFamily: view.family
-      enabled: false
-    }
-  }
 
   Row {
     width: parent.width
@@ -65,24 +48,12 @@ Column {
     }
   }
 
-  Text {
-    width: parent.width
-    text: view.hasModel ? view.model.body : ""
-    textFormat: Text.PlainText
-    wrapMode: Text.WordWrap
-    color: view.fg
-    font.family: view.family
-    font.pixelSize: Style.font.body
-  }
+  Body { text: view.hasModel ? view.model.body : "" }
 
-  Text {
+  Body {
     visible: view.hasModel && view.model.hint !== ""
-    width: parent.width
     text: view.hasModel ? view.model.hint : ""
-    textFormat: Text.PlainText
     wrapMode: Text.WrapAnywhere
-    color: view.fg
-    font.family: view.family
     font.pixelSize: Style.font.bodySmall
   }
 
@@ -98,7 +69,7 @@ Column {
       text: "Retry"
       foreground: view.fg
       fontFamily: view.family
-      onClicked: if (view.panel) view.panel.refresh()
+      onClicked: view.panel.refresh()
     }
 
     Text {
@@ -106,7 +77,7 @@ Column {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       text: "r retry · Esc"
-      color: view.dim
+      color: view.panel.dimForeground
       font.family: view.family
       font.pixelSize: Style.font.caption
     }

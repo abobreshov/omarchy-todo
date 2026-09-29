@@ -10,18 +10,46 @@ import "Model.js" as Model
 Column {
   id: view
 
-  property var panel: null
-  readonly property var item: panel ? panel.detailItem : null
+  required property var panel
+  readonly property var item: panel.detailItem
   readonly property bool hasItem: item !== null
-  readonly property color fg: panel ? panel.contentForeground : Color.foreground
-  readonly property color dim: panel ? panel.dimForeground : Qt.darker(Color.foreground, 1.5)
-  readonly property string family: panel ? panel.contentFontFamily : Style.font.family
+  readonly property bool usable: hasItem && !panel.errored
+  readonly property color fg: panel.contentForeground
+  readonly property color dim: panel.dimForeground
+  readonly property string family: panel.contentFontFamily
   readonly property bool armed: hasItem && panel.ui.armedId === item.id
-  readonly property var tips: Model.actionTooltips(item, {
-    focus: panel ? panel.focusModel : null, pomodoro: panel ? panel.pomodoro : null, armed: armed
-  })
-  readonly property bool disabled: panel !== null && panel.errored
+  readonly property var tips: Model.actionTooltips(item, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
   readonly property string statusText: hasItem ? Model.statusLine(item, { backend: panel.backend, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
+
+  component Body: Text {
+    width: parent.width
+    textFormat: Text.PlainText
+    wrapMode: Text.WordWrap
+    color: view.fg
+    font.family: view.family
+    font.pixelSize: Style.font.body
+  }
+
+  component Caption: Text {
+    textFormat: Text.PlainText
+    elide: Text.ElideRight
+    color: view.dim
+    font.family: view.family
+    font.pixelSize: Style.font.caption
+  }
+
+  component Heading: PanelSectionHeader {
+    foreground: view.fg
+    fontFamily: view.family
+  }
+
+  component ActionButton: PanelActionButton {
+    size: Style.space(24)
+    foreground: view.fg
+    hoverColor: Color.accent
+    fontFamily: view.family
+    enabled: view.usable
+  }
 
   spacing: Style.spacing.md
 
@@ -37,7 +65,7 @@ Column {
       tooltipText: "Back"
       foreground: view.fg
       fontFamily: view.family
-      onClicked: if (view.panel) view.panel.backToList()
+      onClicked: view.panel.backToList()
     }
 
     Text {
@@ -56,43 +84,20 @@ Column {
     }
   }
 
-  Text {
-    width: parent.width
-    text: view.statusText
-    textFormat: Text.PlainText
-    elide: Text.ElideRight
-    color: view.dim
-    font.family: view.family
-    font.pixelSize: Style.font.caption
-  }
+  Caption { width: parent.width; text: view.statusText }
 
-  Text {
-    width: parent.width
+  Body {
     text: view.hasItem && view.item.description !== "" ? view.item.description : "No description."
-    textFormat: Text.PlainText
-    wrapMode: Text.WordWrap
     color: view.hasItem && view.item.description !== "" ? view.fg : view.dim
-    font.family: view.family
-    font.pixelSize: Style.font.body
   }
 
   PanelSeparator { foreground: view.fg }
+  Heading { text: "Plan to close" }
 
-  PanelSectionHeader {
-    text: "Plan to close"
-    foreground: view.fg
-    fontFamily: view.family
-  }
-
-  Text {
+  Body {
     visible: !view.hasItem || view.item.plan.length === 0
-    width: parent.width
     text: "No steps yet. Add them with todocli plan or in Obsidian."
-    textFormat: Text.PlainText
-    wrapMode: Text.WordWrap
     color: view.dim
-    font.family: view.family
-    font.pixelSize: Style.font.body
   }
 
   Repeater {
@@ -102,7 +107,7 @@ Column {
       id: stepRow
       required property var modelData
       required property int index
-      readonly property bool current: view.panel !== null && view.panel.ui.stepCursor === index
+      readonly property bool current: view.panel.ui.stepCursor === index
 
       width: view.width
       height: Math.max(stepCheck.implicitHeight, stepText.implicitHeight) + Style.spacing.md
@@ -116,7 +121,7 @@ Column {
       MouseArea {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
-        onClicked: if (view.panel && !view.disabled) view.panel.toggleStepAt(stepRow.index + 1)
+        onClicked: if (view.usable) view.panel.toggleStepAt(stepRow.index + 1)
       }
 
       Text {
@@ -149,21 +154,12 @@ Column {
   }
 
   PanelSeparator { foreground: view.fg }
+  Heading { text: "Notes" }
 
-  PanelSectionHeader {
-    text: "Notes"
-    foreground: view.fg
-    fontFamily: view.family
-  }
-
-  Text {
+  Body {
     visible: !view.hasItem || view.item.notes.length === 0
-    width: parent.width
     text: "No notes."
-    textFormat: Text.PlainText
     color: view.dim
-    font.family: view.family
-    font.pixelSize: Style.font.body
   }
 
   Repeater {
@@ -191,15 +187,12 @@ Column {
         font.pixelSize: Style.font.body
       }
 
-      Text {
+      Caption {
         id: noteTime
         anchors.right: parent.right
         anchors.rightMargin: Style.spacing.lg
         anchors.verticalCenter: parent.verticalCenter
-        text: Model.noteTime(noteRow.modelData.at, view.panel ? view.panel.clockNow : Date.now(), false)
-        color: view.dim
-        font.family: view.family
-        font.pixelSize: Style.font.caption
+        text: Model.noteTime(noteRow.modelData.at, view.panel.clockNow, false)
       }
     }
   }
@@ -209,70 +202,47 @@ Column {
     spacing: Style.spacing.controlGap
     topPadding: Style.spacing.md
 
-    PanelActionButton {
+    ActionButton {
       iconText: Model.G.doing
       tooltipText: view.tips.doing
-      size: Style.space(24)
-      foreground: view.fg
-      hoverColor: Color.accent
-      fontFamily: view.family
-      enabled: view.hasItem && view.tips.doingEnabled && !view.disabled
-      onClicked: if (view.panel) view.panel.rowKey(view.item.id, "s")
+      enabled: view.usable && view.tips.doingEnabled
+      onClicked: view.panel.rowKey(view.item.id, "s")
     }
 
-    PanelActionButton {
+    ActionButton {
       iconText: Model.G.done
       tooltipText: view.tips.done
-      size: Style.space(24)
-      foreground: view.fg
-      hoverColor: Color.accent
-      fontFamily: view.family
-      enabled: view.hasItem && !view.disabled
-      onClicked: if (view.panel) view.panel.rowKey(view.item.id, "d")
+      onClicked: view.panel.rowKey(view.item.id, "d")
     }
 
-    PanelActionButton {
+    ActionButton {
       iconText: Model.G.focus
       tooltipText: view.tips.focus
-      size: Style.space(24)
-      foreground: view.fg
-      hoverColor: Color.accent
-      fontFamily: view.family
-      enabled: view.hasItem && view.tips.focusEnabled && !view.disabled
-      onClicked: if (view.panel) view.panel.rowKey(view.item.id, "f")
+      enabled: view.usable && view.tips.focusEnabled
+      onClicked: view.panel.rowKey(view.item.id, "f")
     }
 
-    PanelActionButton {
+    ActionButton {
       iconText: Model.G.pomodoro
       tooltipText: view.tips.pomodoro
-      size: Style.space(24)
-      foreground: view.fg
-      hoverColor: Color.accent
-      fontFamily: view.family
-      enabled: view.hasItem && view.tips.pomodoroEnabled && !view.disabled
-      onClicked: if (view.panel) view.panel.rowKey(view.item.id, "p")
+      enabled: view.usable && view.tips.pomodoroEnabled
+      onClicked: view.panel.rowKey(view.item.id, "p")
     }
 
-    PanelActionButton {
+    ActionButton {
       iconText: Model.G.del
       tooltipText: view.tips.del
-      size: Style.space(24)
       foreground: view.armed ? Color.urgent : view.fg
       hoverColor: Color.urgent
-      fontFamily: view.family
-      enabled: view.hasItem && !view.disabled
-      onClicked: if (view.panel) view.panel.armDelete(view.item.id)
+      onClicked: view.panel.armDelete(view.item.id)
     }
   }
 
-  Text {
-    visible: view.panel !== null && view.panel.ui.help
+  Caption {
+    visible: view.panel.ui.help
     width: parent.width
-    text: Model.helpLine("detail", view.panel ? view.panel.backend : "json")
-    textFormat: Text.PlainText
+    text: Model.helpLine("detail", view.panel.backend)
     wrapMode: Text.WordWrap
-    color: view.dim
-    font.family: view.family
-    font.pixelSize: Style.font.caption
+    elide: Text.ElideNone
   }
 }
