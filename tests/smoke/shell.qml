@@ -58,6 +58,15 @@ ShellRoot {
       return "ok"
     }
     function pill(): string { return JSON.stringify(loader.item ? loader.item.pill : null) }
+    // The row's {del} button as TaskRow's onClicked calls it (Panel.rowKey):
+    // one call arms the row, a second within 3 s removes the item. Answers
+    // the armed id (tests/smoke.sh).
+    function deleteRow(id: string): string {
+      var panel = loader.item ? loader.item.panel : null
+      if (!panel) return "unavailable"
+      panel.rowKey(id, "x")
+      return JSON.stringify(panel.ui.armedId)
+    }
     function width(): string { return String(loader.item ? loader.item.implicitWidth : -1) }
     function quit(): void { Qt.quit() }
   }

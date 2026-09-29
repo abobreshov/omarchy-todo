@@ -182,9 +182,9 @@ test("transient message copy (UX §4.5, §7) and the empty-state and help lines"
   assert.equal(View.emptyCopy([]), "Nothing here yet. Press + to add a todo.");
   assert.equal(View.emptyCopy([item("1", "a", "done")]), "All clear. Press + to add a todo.");
   assert.equal(View.emptyCopy([item("1", "a", "todo")]), null);
-  assert.equal(View.helpLine("list", "cli"), "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload · R sync · Tab next panel");
-  assert.equal(View.helpLine("list", "json"), "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload · Tab next panel");
-  assert.equal(View.helpLine("detail", "cli"), "Enter step · d done · s doing · f focus · p pomodoro · x x delete · Esc back");
+  assert.equal(View.helpLine("list", "cli"), "n new · d done · s doing · f focus · p pomodoro · x x or Del delete · r reload · R sync · Tab next panel");
+  assert.equal(View.helpLine("list", "json"), "n new · d done · s doing · f focus · p pomodoro · x x or Del delete · r reload · Tab next panel");
+  assert.equal(View.helpLine("detail", "cli"), "Enter step · d done · s doing · f focus · p pomodoro · x x or Del delete · Esc back");
 });
 
 // ------------------------------------------------------------- focus line
@@ -235,17 +235,24 @@ test("focusLine renders the UX §4.2 variants F0–F6", () => {
 });
 
 // ------------------------------------------------------------- row cluster
-test("rowActions: one slot each for the focus and pomodoro mark or ghost; the armed caption replaces the cluster (UX §4.2)", () => {
+test("rowActions: one slot each for the focus, pomodoro and delete mark or ghost; the armed caption replaces the first two (UX §4.2)", () => {
   const plain = item("1", "one", "todo");
   const planned = item("2", "two", "doing", { plan: [{ text: "a", done: true }, { text: "b", done: false }] });
   const done = item("3", "three", "done");
   const focus = { text: "one", taskId: "1" };
   const shape = (a) => ({ f: a.focus.mark + "/" + a.focus.ghost, p: a.pomodoro.mark + "/" + a.pomodoro.ghost });
+  const delGhost = { mark: false, ghost: true, held: false, tooltip: "Delete (x x or Del)" };
   assert.deepEqual(View.rowActions(plain, { focus: null, pomodoro: idle }), {
     armed: false, caption: "", progress: "",
-    focus: { mark: false, ghost: true, tooltip: "Set focus (f)" },
-    pomodoro: { mark: false, running: false, ghost: true, tooltip: "Start pomodoro (p)" }
+    focus: { mark: false, ghost: true, held: false, tooltip: "Set focus (f)" },
+    pomodoro: { mark: false, running: false, ghost: true, held: false, tooltip: "Start pomodoro (p)" },
+    del: delGhost
   });
+  assert.deepEqual(View.rowActions(done, { focus: null, pomodoro: idle }).del, delGhost, "a done row keeps the delete ghost: done rows can be deleted too");
+  assert.deepEqual(View.rowActions(plain, { focus, pomodoro: onTask("1") }).del, delGhost, "the focus / attached task keeps it as well");
+  assert.equal(View.TIP_DELETE, "Delete (x x or Del)");
+  assert.equal(View.TIP_DELETE_ARMED, "Click or x again to delete");
+  assert.equal(View.CAPTION_ARMED, "click or x again to delete");
   assert.deepEqual(shape(View.rowActions(plain, { focus, pomodoro: idle })), { f: "true/false", p: "false/true" }, "the focus task carries the mark, not the ghost");
   const onOne = View.rowActions(plain, { focus, pomodoro: onTask("1") });
   assert.deepEqual(shape(onOne), { f: "true/false", p: "true/false" }, "the attached task carries the pomodoro mark");
@@ -257,11 +264,15 @@ test("rowActions: one slot each for the focus and pomodoro mark or ghost; the ar
   assert.deepEqual(shape(View.rowActions(done, { focus: null, pomodoro: onTask("3") })), { f: "false/false", p: "true/false" }, "but keeps the mark of the pomodoro still attached to it");
   const armed = View.rowActions(planned, { focus: { text: "two", taskId: "2" }, pomodoro: onTask("2"), armed: true });
   assert.deepEqual(armed, {
-    armed: true, caption: "x again to delete", progress: "",
-    focus: { mark: false, ghost: false, tooltip: "Set focus (f)" },
-    pomodoro: { mark: false, running: true, ghost: false, tooltip: "Start pomodoro (p)" }
-  }, "armed: the caption alone");
+    armed: true, caption: "click or x again to delete", progress: "",
+    focus: { mark: false, ghost: false, held: false, tooltip: "Set focus (f)" },
+    pomodoro: { mark: false, running: true, ghost: false, held: false, tooltip: "Start pomodoro (p)" },
+    del: { mark: false, ghost: true, held: true, tooltip: "Click or x again to delete" }
+  }, "armed: the caption, and the delete ghost held (shown without hover) for the second click");
+  assert.equal(View.rowActions(done, { focus: null, pomodoro: idle, armed: true }).del.held, true, "an armed done row holds it too");
+  assert.equal(View.rowActions(plain, { focus: null, pomodoro: idle, armed: "yes" }).armed, false, "armed is strictly boolean");
   assert.deepEqual(shape(View.rowActions(null, null)), { f: "false/true", p: "false/true" }, "total on missing input");
+  assert.deepEqual(View.rowActions(null, null).del, delGhost);
 });
 
 // ------------------------------------------------------------- detail
@@ -273,12 +284,13 @@ test("statusLine and action tooltips for the detail view (UX §4.4)", () => {
   assert.equal(View.statusLine(item("t1", "x", "done", { due: "2026-10-02" }), { backend: "json", focus: { text: "", taskId: null }, pomodoro: null }), G.done + " done", "due is cli-only");
   assert.equal(View.statusLine(null, {}), "");
   const tips = View.actionTooltips(it, { focus: { text: "", taskId: "12" }, pomodoro: pom, armed: false });
-  assert.deepEqual(tips, { doing: "Back to todo (s)", done: "Mark done (d)", focus: "Clear focus (f)", pomodoro: "Pause pomodoro (p)", del: "Delete (x x)", doingEnabled: true, focusEnabled: true, pomodoroEnabled: true });
+  assert.deepEqual(tips, { doing: "Back to todo (s)", done: "Mark done (d)", focus: "Clear focus (f)", pomodoro: "Pause pomodoro (p)", del: "Delete (x x or Del)", doingEnabled: true, focusEnabled: true, pomodoroEnabled: true });
   const todoTips = View.actionTooltips(item("3", "x", "todo"), { focus: { text: "", taskId: "12" }, pomodoro: onTask("3", { running: false, remaining: 1, label: "" }), armed: true });
   assert.equal(todoTips.doing, "Mark doing (s)");
   assert.equal(todoTips.focus, "Set focus (f)");
   assert.equal(todoTips.pomodoro, "Resume pomodoro (p)");
-  assert.equal(todoTips.del, "Click again to delete");
+  assert.equal(todoTips.del, "Click or x again to delete", "the detail button's armed tooltip matches the row caption");
+  assert.equal(View.actionTooltips(item("3", "x", "done"), { armed: true }).del, "Click or x again to delete", "a done task can be deleted too");
   const doneTips = View.actionTooltips(item("3", "x", "done"), { focus: { text: "", taskId: null }, pomodoro: null, armed: false });
   assert.equal(doneTips.done, "Reopen (d)");
   assert.equal(doneTips.doing, "Done · d reopens it");

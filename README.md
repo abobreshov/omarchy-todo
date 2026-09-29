@@ -19,8 +19,10 @@ views, the keys and the JSON-file pattern are upstream's.
 - **Focus, doing, done** — `f` sets the focus (the pill shows it), `s` marks
   doing, `d` ticks done. A done row stays visible, struck through, until the
   panel closes; `d` again reopens it.
-- **Explicit delete** — `x x` in the list, the delete button in the detail
-  view, or IPC `remove`. Ticking never deletes.
+- **Explicit delete** — `x x`, Delete or Backspace on the row (the first
+  press arms it, the second deletes), the row's trash button on hover or the
+  detail view's, with the same two clicks, or IPC `remove`. Ticking never
+  deletes.
 - **Details on demand** — Enter on a row shows the description, the plan
   (steps tick with Enter or Space) and the notes.
 - **Pomodoro hand-off** — `p` (or a middle click on the pill) focuses the task
@@ -69,7 +71,7 @@ Click the checkbox icon in the bar (or `omarchy-shell abobreshov.todo toggle`).
 | `s` | Toggle doing (on the focus task, doing → todo also clears the focus) | Same |
 | `f` | Set as focus (marks it doing); on the focus task: clear | Same |
 | `p` | Focus it and start its pomodoro; on the attached task: pause/resume | Same |
-| `x` `x` | Delete (armed for 3 s) | Delete and go back |
+| `x` `x`, Delete, Backspace | Delete (the first press arms the row for 3 s, the second, any of the three, deletes) | Delete and go back |
 | `r` | Reload (json: re-read the file; cli: `todocli board --json`) | Same |
 | `R` | Sync now (cli only) | Same |
 | `?` | Shortcut line | Same |
@@ -79,8 +81,11 @@ Click the checkbox icon in the bar (or `omarchy-shell abobreshov.todo toggle`).
 On a done row `s`, `f` and `p` are inert (`#12 is done · d reopens it`); the
 one exception is `p` on the task the running pomodoro is attached to, which
 pauses or resumes it. Mouse: the row checkbox toggles done, the title opens
-the detail, the ghost `(o)`/`(t)` buttons on hover set the focus / start the
-pomodoro, the footer's failure text runs a sync.
+the detail, the ghost `(o)`/`(t)`/`{del}` buttons on hover set the focus /
+start the pomodoro / arm the delete (the row's caption reads `click or x
+again to delete`; a second click on `{del}` within 3 s deletes, a click
+elsewhere or moving to another row disarms), the footer's failure text runs
+a sync.
 
 The pill shows, in this order: a backend error, the doing task (the focus task
 if it is doing, else the lowest id), the focus text, the open count, nothing.

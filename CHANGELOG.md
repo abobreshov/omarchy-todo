@@ -33,6 +33,16 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   `d` done, `s` doing, `f` focus, `p` pomodoro, `r` reload, `R` sync,
   `?` shortcut line, Tab to the neighbouring bar panel.
 - Read-only detail view with the plan (steps can be ticked) and notes.
+- Delete from the list with the mouse: a third fixed 24 px slot in every
+  row's right cluster holds a `{del}` ghost (urgent on hover) that fades in
+  with `(o)` and `(t)`; the first click arms the row (caption `click or x
+  again to delete`; the button stays put and lit), a second click within
+  3 s deletes, as `x x` does. The detail view's delete button follows the
+  same two-click rule (`Delete (x x or Del)`, then `Click or x again to
+  delete`).
+- Delete and Backspace arm and confirm a delete like `x`, in the list and
+  the detail view (`Keys.keyAction` names them); the help line reads
+  `x x or Del delete`.
 - Bar pill shows the doing task, the focus text or the open count.
 - `backend = cli`: every read and write goes through `todocli --source omarchy
   --json` as a plain argv `Process`; the panel re-reads on todocli's change

@@ -173,16 +173,16 @@ Panel {
   }
   function backToList() { dispatch({ type: "esc" }) }
   function beginCompose() { dispatch({ type: "key", key: "n" }) }
-  function armDelete(id) {
-    if (ui.view === "detail" && ui.selectedId === String(id)) dispatch({ type: "delete" })
-    else { dispatch({ type: "selectTask", id: id }); dispatch({ type: "delete" }) }
-  }
 
-  // Mouse twins of the keys (UX §4.6); each calls the same function.
+  // Mouse twins of the keys (UX §4.6); each calls the same function. A
+  // delete button ("x") goes through the reducer with its row's id, so the
+  // first click arms and the second removes, as `x x` does.
   function rowKey(id, key) {
     var it = Model.findItem(items, id)
     var action = KeyMap.keyAction("list", key, { item: it, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
-    if (action) apply(action)
+    if (!action) return
+    if (action.type === "delete") dispatch({ type: "delete", id: String(id) })
+    else apply(action)
   }
   function tickRow(id) { rowKey(id, "d") }
   function toggleStepAt(n) { if (detailItem) perform({ type: "toggleStep", id: detailItem.id, n: n }) }

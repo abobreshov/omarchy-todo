@@ -104,6 +104,23 @@ test("UI-10: r refreshes and R asks the store to sync whatever the backend; erro
   assert.equal(Keys.keyAction("compose", "d", ctxFor({ item: item("1", "x", "todo") })), null, "compose keys belong to the fields");
 });
 
+test("x, Delete and BackSpace are the delete keys in the list and detail views, by name and as the kit's text (UX §4.5)", () => {
+  const ctx = ctxFor({ item: item("3", "Wire", "todo") });
+  for (const k of ["x", "X", "Delete", "BackSpace", "\u007f", "\b"]) {
+    const label = JSON.stringify(k);
+    assert.equal(Keys.isDeleteKey(k), true, label);
+    assert.deepEqual(Keys.keyAction("list", k, ctx), { type: "delete" }, label);
+    assert.deepEqual(Keys.keyAction("detail", k, ctx), { type: "delete" }, label);
+    assert.deepEqual(Keys.keyAction("list", k, ctxFor({ item: item("3", "Wire", "done"), sessionDone: { 3: "todo" } })), { type: "delete" }, label + " on a done row");
+    assert.equal(Keys.keyAction("error", k, ctx), null, label + " in the error view");
+    assert.equal(Keys.keyAction("compose", k, ctx), null, label + " while composing is text");
+  }
+  // Which row (or none: the focus line, an empty list) is the reducer's call.
+  assert.deepEqual(Keys.keyAction("list", "Delete", ctxFor({ item: null })), { type: "delete" });
+  assert.deepEqual(Keys.keyAction("list", "\b", ctxFor({ onFocusLine: true, item: null, focus: { text: "Ship", taskId: null } })), { type: "delete" });
+  for (const k of ["d", "s", "f", "p", "r", "?", "n", "z", "", "xx", "delete"]) assert.equal(Keys.isDeleteKey(k), false, JSON.stringify(k));
+});
+
 // ---------------------------------------------------------------- reduceUi
 function rows(items, focusRow) {
   const out = [];
@@ -248,6 +265,112 @@ test("delete in the detail view removes and returns to the list", () => {
   r = run(armedElsewhere, [{ type: "delete", now: 10 }], ctx);
   assert.deepEqual(r.actions, [], "an arm for another id re-arms this one");
   assert.equal(r.ui.armedId, "6");
+});
+
+test("Delete and BackSpace through the reducer arm and confirm like x x; a cursor move, a hover or another key disarms", () => {
+  const ctx = uiCtx({ rows: rows([item("6", "Six", "todo"), item("7", "Seven", "todo")]) });
+  // Delete (the kit's text U+007F) arms; BackSpace (U+0008) confirms.
+  let r = run(Keys.initialUi(), [{ type: "key", key: "\u007f", now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "6");
+  assert.equal(r.ui.armedAt, 0);
+  assert.deepEqual(r.actions, []);
+  r = run(r.ui, [{ type: "key", key: "\b", now: 1000 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  assert.equal(r.ui.armedId, "");
+  // Any mix with x (the kit's deleteRequested) confirms.
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "delete", now: 500 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  r = run(Keys.initialUi(), [{ type: "delete", now: 0 }, { type: "key", key: "BackSpace", now: 500 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  r = run(Keys.initialUi(), [{ type: "key", key: "x", now: 0 }, { type: "key", key: "X", now: 500 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }], "x as text (a kit without deleteRequested) works the same");
+  // A cursor move disarms: the next press arms the new row instead of confirming.
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "move", dx: 0, dy: 1, now: 1 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  assert.equal(r.ui.cursor, 1);
+  r = run(r.ui, [{ type: "key", key: "Delete", now: 2 }], ctx);
+  assert.deepEqual(r.actions, []);
+  assert.equal(r.ui.armedId, "7", "re-armed on the new row, not confirmed");
+  // Hovering another row disarms; hovering the armed row does not.
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "hover", index: 1, now: 1 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "hover", index: 0, now: 1 }, { type: "key", key: "\b", now: 2 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  // Another key, Esc, or the timeout disarms.
+  r = run(Keys.initialUi(), [{ type: "key", key: "BackSpace", now: 0 }, { type: "key", key: "d", now: 1 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  assert.deepEqual(r.actions, [{ type: "setStatus", id: "6", status: "done" }]);
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "esc", now: 1 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  assert.deepEqual(r.actions, []);
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "key", key: "Delete", now: 3001 }], ctx);
+  assert.deepEqual(r.actions, []);
+  assert.equal(r.ui.armedAt, 3001, "a late second press re-arms");
+  // The detail view: Delete then BackSpace removes and goes back to the list.
+  const detail = Object.assign(Keys.initialUi(), { view: "detail", selectedId: "7" });
+  r = run(detail, [{ type: "key", key: "Delete", now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "7");
+  assert.equal(r.ui.view, "detail");
+  r = run(r.ui, [{ type: "key", key: "\b", now: 100 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "7" }]);
+  assert.equal(r.ui.view, "list");
+  // The focus line, the error view and compose are not delete targets.
+  const onFocus = uiCtx({ rows: rows([item("6", "Six", "doing")], { kind: "focus", item: item("6", "Six", "doing"), selectable: true }), focus: { text: "", taskId: "6" } });
+  r = run(Object.assign(Keys.initialUi(), { armedId: "6", armedAt: 0 }), [{ type: "key", key: "Delete", now: 1 }], onFocus);
+  assert.equal(r.ui.armedId, "", "the focus line is not a row to delete, and the press disarms");
+  assert.deepEqual(r.actions, []);
+  r = run(Object.assign(Keys.initialUi(), { view: "error" }), [{ type: "key", key: "Delete", now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  assert.deepEqual(r.actions, []);
+  r = run(Object.assign(Keys.initialUi(), { view: "compose", name: "x" }), [{ type: "key", key: "\b", now: 0 }], ctx);
+  assert.equal(r.ui.view, "compose");
+  assert.equal(r.ui.armedId, "");
+});
+
+test("the row's delete button (delete{id}) arms that row, moving the cursor to it, and a second click removes it", () => {
+  const six = item("6", "Six", "todo");
+  const seven = item("7", "Seven", "done");
+  const ctx = uiCtx({ rows: rows([six, seven], { kind: "focus", item: six, selectable: true }), focus: { text: "", taskId: "6" } });
+  let r = run(Keys.initialUi(), [{ type: "delete", id: "7", now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "7");
+  assert.equal(r.ui.cursor, 2, "the item row, not the focus line");
+  assert.deepEqual(r.actions, []);
+  r = run(r.ui, [{ type: "delete", id: "7", now: 1000 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "7" }], "a done row can be deleted");
+  assert.equal(r.ui.armedId, "");
+  r = run(Keys.initialUi(), [{ type: "delete", id: "6", now: 0 }], ctx);
+  assert.equal(r.ui.cursor, 1, "the focus task's button arms its list row");
+  // A click on another row's button re-arms that row.
+  r = run(Keys.initialUi(), [{ type: "delete", id: "6", now: 0 }, { type: "delete", id: "7", now: 100 }], ctx);
+  assert.equal(r.ui.armedId, "7");
+  assert.deepEqual(r.actions, []);
+  // The button and the keys arm one row: click, then x / Delete confirms.
+  r = run(Keys.initialUi(), [{ type: "delete", id: "6", now: 0 }, { type: "delete", now: 100 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  r = run(Object.assign(Keys.initialUi(), { cursor: 1 }), [{ type: "key", key: "Delete", now: 0 }, { type: "delete", id: "6", now: 100 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }], "and the other way round");
+  r = run(Keys.initialUi(), [{ type: "key", key: "Delete", now: 0 }, { type: "delete", id: "6", now: 100 }], ctx);
+  assert.deepEqual(r.actions, [], "Delete on the focus line (cursor 0) arms nothing, so the click only arms");
+  assert.equal(r.ui.armedId, "6");
+  // A click after the timeout re-arms; an unknown id disarms; numeric ids are coerced.
+  r = run(Keys.initialUi(), [{ type: "delete", id: "6", now: 0 }, { type: "delete", id: "6", now: 3001 }], ctx);
+  assert.deepEqual(r.actions, []);
+  assert.equal(r.ui.armedAt, 3001);
+  r = run(Object.assign(Keys.initialUi(), { armedId: "6", armedAt: 0 }), [{ type: "delete", id: "99", now: 1 }], ctx);
+  assert.equal(r.ui.armedId, "");
+  assert.deepEqual(r.actions, []);
+  r = run(Keys.initialUi(), [{ type: "delete", id: 6, now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "6");
+  r = run(Object.assign(Keys.initialUi(), { cursor: 1 }), [{ type: "delete", id: null, now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "6", "a null id reads as the cursor row");
+  r = run(Keys.initialUi(), [{ type: "delete", id: null, now: 0 }], ctx);
+  assert.equal(r.ui.armedId, "", "and the cursor on the focus line is no row to delete");
+  // In the detail view the button acts on the task shown, as x does.
+  r = run(Object.assign(Keys.initialUi(), { view: "detail", selectedId: "6" }), [{ type: "delete", id: "6", now: 0 }, { type: "delete", id: "6", now: 1 }], ctx);
+  assert.deepEqual(r.actions, [{ type: "remove", id: "6" }]);
+  assert.equal(r.ui.view, "list");
+  assert.equal(Keys.rowIndexOf(ctx, "7"), 2);
+  assert.equal(Keys.rowIndexOf({}, "7"), -1);
 });
 
 test("UI-7: Enter or Space in the detail view toggles the step under the cursor", () => {

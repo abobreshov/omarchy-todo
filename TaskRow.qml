@@ -5,9 +5,11 @@ import qs.Ui
 import "Model.js" as Model
 import "View.js" as View
 
-// One list row (UX §4.2): status glyph · title · plan n/m · (o) · (t). The
-// status glyph is the click target upstream's checkbox was; it now marks
-// done rather than deleting. Mouse and keyboard share one cursor.
+// One list row (UX §4.2): status glyph · title · plan n/m · (o) · (t) ·
+// {del}. The status glyph is the click target upstream's checkbox was; it
+// now marks done rather than deleting; {del} arms the row on the first
+// click and deletes on the second, as `x x` does. Mouse and keyboard share
+// one cursor.
 //
 // Hover is owned by a HoverHandler on the row, not by the row's MouseArea:
 // a child MouseArea (the checkbox, a ghost button) takes the hover from the
@@ -42,13 +44,17 @@ Item {
   }
 
   // One fixed slot of the cluster: the state mark, or the ghost button that
-  // fades in while the row is hovered and is live only then.
+  // fades in while the row is hovered (or while the spec holds it: the
+  // armed row's {del}) and is live only then. Opacity and enabled only,
+  // never visible or size, so nothing under the pointer moves.
   component Slot: Item {
     id: slot
     required property var spec
     required property string glyph
     required property string key
     property color markColor: row.dim
+    property color hotColor: Color.accent
+    readonly property bool lit: spec.ghost && (row.rowHovered || spec.held)
     width: row.slotSize
     height: row.slotSize
     anchors.verticalCenter: parent.verticalCenter
@@ -59,12 +65,12 @@ Item {
       anchors.centerIn: parent
       size: row.slotSize
       visible: !slot.spec.mark
-      opacity: slot.spec.ghost && row.rowHovered ? 1 : 0
-      enabled: slot.spec.ghost && row.rowHovered && !row.panel.errored
+      opacity: slot.lit ? 1 : 0
+      enabled: slot.lit && !row.panel.errored
       iconText: slot.glyph
       tooltipText: slot.spec.tooltip
-      foreground: row.dim
-      hoverColor: Color.accent
+      foreground: slot.spec.held ? slot.hotColor : row.dim
+      hoverColor: slot.hotColor
       fontFamily: row.family
       fontSize: Style.font.caption
       onClicked: row.panel.rowKey(row.modelData.id, slot.key)
@@ -140,8 +146,9 @@ Item {
     font.pixelSize: Style.font.body
   }
 
-  // Right cluster: plan progress, then the focus and pomodoro slots; the
-  // armed-delete caption replaces it all.
+  // Right cluster: plan progress, then the focus, pomodoro and delete
+  // slots; the armed-delete caption replaces the progress and the first
+  // two, never the delete slot.
   Row {
     id: cluster
     anchors.right: parent.right
@@ -166,6 +173,15 @@ Item {
       glyph: Model.G.pomodoro
       key: "p"
       markColor: row.actions.pomodoro.running ? Color.accent : row.dim
+    }
+
+    // The last, right-anchored child: it keeps its place across the arm,
+    // so the second click lands where the first did.
+    Slot {
+      spec: row.actions.del
+      glyph: Model.G.del
+      key: "x"
+      hotColor: Color.urgent
     }
   }
 }

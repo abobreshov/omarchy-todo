@@ -4,13 +4,22 @@
 
 // Key resolution and the panel's view-state reducer (UX §4.5, §7; PLAN
 // §6.8, A20). Pure: `keyAction` turns a key into a store action (or a
-// transient message) given the row under the cursor; `reduceUi` runs the
-// view machine (list / compose / detail / error, cursor, armed delete,
-// help line). Panel.qml forwards kit signals as events and applies the
-// returned actions to the store. The tables in UX §4.5 and PRODUCT UI-1..10
-// are the fixtures.
+// transient message, or the `delete` request the reducer arms) given the
+// row under the cursor; `reduceUi` runs the view machine (list / compose /
+// detail / error, cursor, armed delete, help line). Panel.qml forwards kit
+// signals as events and applies the returned actions to the store. The
+// tables in UX §4.5 and PRODUCT UI-1..10 are the fixtures.
 
 var ARM_MS = 3000
+
+// The delete keys (UX §4.5). The kit turns `x` / `X` into its
+// `deleteRequested` signal (Panel.qml dispatches `delete`); Delete and
+// BackSpace reach `textKey` as the control characters their keysyms carry
+// (xkbcommon maps BackSpace to U+0008 and Delete to U+007F, and Qt passes
+// the text through), so both spellings are named here.
+var DELETE_KEYS = { "x": true, "X": true, "Delete": true, "BackSpace": true, "\u007f": true, "\b": true }
+
+function isDeleteKey(key) { return DELETE_KEYS[key] === true }
 
 function initialUi() {
   return {
@@ -54,6 +63,8 @@ function keyAction(view, key, ctx) {
   if (key === "r") return { type: "refresh" }
   if (key === "R") return { type: "syncNow" }
   if (view === "error") return null
+  // Which row, and whether this press arms or confirms, is the reducer's.
+  if (isDeleteKey(key)) return { type: "delete" }
   if (key === "?") return { type: "toggleHelp" }
   if (view === "list" && (key === "n" || key === "N" || key === "+")) return { type: "compose" }
   var item = c.item || null
@@ -159,10 +170,26 @@ function activateRow(ui, ctx, actions) {
   else if (row.item) openDetail(ui, row.item.id)
 }
 
-function handleDelete(ui, ctx, now, actions) {
+function rowIndexOf(ctx, id) {
+  var rows = ctx.rows || []
+  var key = String(id)
+  for (var i = 0; i < rows.length; i++)
+    if (rows[i] && rows[i].kind === "item" && rows[i].item && rows[i].item.id === key) return i
+  return -1
+}
+
+// `x x`, Delete, BackSpace, the row's {del} ghost or the detail view's
+// delete button (UX §4.2, §4.4): the first press arms the row, the second
+// within ARM_MS removes it. `ev.id` is the row whose button was clicked;
+// the cursor moves there first, so the keys and the button arm one row.
+function handleDelete(ui, ctx, ev, actions) {
+  var now = ev.now || 0
   var id = ""
   if (ui.view === "detail") id = ui.selectedId
-  else {
+  else if (ev.id !== undefined && ev.id !== null) {
+    var index = rowIndexOf(ctx, ev.id)
+    if (index >= 0) { ui.cursor = index; id = String(ev.id) }
+  } else {
     var row = rowAt(ui, ctx)
     if (row && row.kind === "item" && row.item) id = row.item.id
   }
@@ -179,8 +206,9 @@ function handleDelete(ui, ctx, now, actions) {
 
 // Events: open, close, storeError{error}, selectTask{id}, key{key,now},
 // text{text}, enter, space, esc, tab{direction}, move{dx,dy}, hover{index},
-// delete{now}, tick{now}. `ctx`: { rows, steps, backend, focus,
-// sessionDone, pomodoro, prefill }.
+// delete{now, id?} (`id`: the row whose delete button was clicked),
+// tick{now}. `ctx`: { rows, steps, backend, focus, sessionDone, pomodoro,
+// prefill }.
 function reduceUi(ui, event, ctx) {
   var next = copyUi(ui)
   var actions = []
@@ -257,15 +285,17 @@ function reduceUi(ui, event, ctx) {
       }
       break
     case "delete":
-      if (next.view === "list" || next.view === "detail") handleDelete(next, c, now, actions)
+      if (next.view === "list" || next.view === "detail") handleDelete(next, c, ev, actions)
       break
     case "tick":
       if (next.armedId !== "" && now - next.armedAt > ARM_MS) disarm(next)
       break
     case "key": {
       if (next.view === "compose") break
-      disarm(next)
       var action = keyAction(next.view, ev.key, keyContext(next, c))
+      // Delete / BackSpace keep the armed row: the second press confirms.
+      if (action && action.type === "delete") { handleDelete(next, c, ev, actions); break }
+      disarm(next)
       if (!action) break
       if (action.type === "toggleHelp") next.help = !next.help
       else if (action.type === "compose") openCompose(next, "", actions)

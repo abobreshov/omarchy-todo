@@ -82,6 +82,15 @@ check "refresh" "$(call refresh)" "ok"
 check "syncNow in json mode" "$(call syncNow)" "Sync needs backend = cli."
 check "remove" "$(call remove t2)" "ok"
 check "remove unknown is ok (upstream)" "$(call remove zz)" "ok"
+# The row's {del} ghost (UX §4.2): the first click arms, the second removes.
+check "row delete: a row to delete" "$(call add 'Doomed' '')" "Doomed"
+doomed="$(dump | field '[t["id"] for t in d["open"] if t["title"] == "Doomed"][0]')"
+check "row delete: the first click arms the row" "$(qs ipc -p "$root" call smoke deleteRow "$doomed")" "\"$doomed\""
+check "row delete: still listed after one click" "$(dump | field 'any(t["title"] == "Doomed" for t in d["open"])')" "True"
+check "row delete: the second click removes it" "$(qs ipc -p "$root" call smoke deleteRow "$doomed")" '""'
+check "row delete: gone from the list" "$(dump | field 'any(t["title"] == "Doomed" for t in d["open"])')" "False"
+sleep 0.5
+check "row delete: gone from the json file" "$(python3 -c 'import json,sys; print(any(t["name"] == "Doomed" for t in json.load(open(sys.argv[1]))["todos"]))' "$home/.local/state/abobreshov.todo/todos.json")" "False"
 check "startPomodoro unknown" "$(call startPomodoro zz)" "unknown id"
 check "startPomodoro without a focus" "$(call startPomodoro focus)" "no focus"
 check "dump.backend json" "$(dump | field 'd["backend"]')" "json"
@@ -102,7 +111,11 @@ check "setStatus in cli mode" "$(call setStatus 3 done)" "ok"
 check "focus clear in cli mode" "$(call focus clear)" "ok"
 check "syncNow in cli mode" "$(call syncNow)" "ok"
 sleep 0.8
-check "write FIFO order with a read after each" "$(grep -o '"argv":\[[^]]*\]' "$FAKE_LOG" | sed -E 's/.*"--json",//; s/\]$//' | tr -d '"' | tr '\n' ';')" "board;board;add,--description=Semi-skimmed,--,Buy milk --json;board;done,3;board;focus,--clear;board;sync,all;board;"
+# The row's {del} ghost in cli mode: two clicks run `todocli rm 3`.
+check "row delete (cli): the first click arms #3" "$(qs ipc -p "$root" call smoke deleteRow 3)" '"3"'
+check "row delete (cli): the second click removes it" "$(qs ipc -p "$root" call smoke deleteRow 3)" '""'
+sleep 0.8
+check "write FIFO order with a read after each" "$(grep -o '"argv":\[[^]]*\]' "$FAKE_LOG" | sed -E 's/.*"--json",//; s/\]$//' | tr -d '"' | tr '\n' ';')" "board;board;add,--description=Semi-skimmed,--,Buy milk --json;board;done,3;board;focus,--clear;board;sync,all;board;rm,3;board;"
 
 # ---- E4 / E7 ---------------------------------------------------------------
 qs ipc -p "$root" call smoke settings '{"backend":"cli","cliPath":"/nonexistent/todocli"}' >/dev/null

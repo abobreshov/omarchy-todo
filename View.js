@@ -10,6 +10,12 @@
 
 var MSG_DONE_ATTACHED = "Done. p on the next task moves the pomodoro."
 
+// The delete copy (UX §4.2, §4.4): the tooltip of the row's {del} ghost and
+// of the detail view's button, and what both say once the row is armed.
+var TIP_DELETE = "Delete (x x or Del)"
+var TIP_DELETE_ARMED = "Click or x again to delete"
+var CAPTION_ARMED = "click or x again to delete"
+
 // ---------------------------------------------------------------- session
 
 // `d` on an open row (UX §4.2 done handling): remember its pre-tick status
@@ -235,19 +241,22 @@ function emptyCopy(items) {
 }
 
 function helpLine(view, backend) {
-  if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro · x x delete · Esc back"
-  return "n new · d done · s doing · f focus · p pomodoro · x x delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
+  if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro · x x or Del delete · Esc back"
+  return "n new · d done · s doing · f focus · p pomodoro · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
 }
 
 // ---------------------------------------------------------------- row cluster
 
-// UX §4.2 row anatomy, the right cluster: the plan progress, then one slot
-// for the focus mark or its ghost and one for the pomodoro mark or its
-// ghost; the armed delete (x once) replaces the cluster with its caption.
-// Each slot is always laid out and a ghost only fades in (opacity) while the
-// row is hovered: a control made visible under the pointer takes the hover
-// from the row, which hides it again, and the icons flicker (the hover
-// glitch); a hidden control that keeps its space cannot.
+// UX §4.2 row anatomy, the right cluster: the plan progress, then three
+// fixed slots: the focus mark or its ghost, the pomodoro mark or its ghost,
+// and the {del} ghost. Each slot is always laid out and a ghost only fades
+// in (opacity) while the row is hovered: a control made visible under the
+// pointer takes the hover from the row, which hides it again, and the icons
+// flicker (the hover glitch); a hidden control that keeps its space cannot.
+// The armed delete (x, Delete, BackSpace or the ghost, once) replaces the
+// progress and the first two slots with its caption; the {del} slot stays,
+// `held` (shown and live without hover), so the second click lands where
+// the first did. A done row keeps it: done rows can be deleted too.
 function rowActions(item, ctx) {
   var c = ctx || {}
   var it = item || { id: "", status: "todo" }
@@ -257,15 +266,17 @@ function rowActions(item, ctx) {
   var attached = Model.isAttached(c.pomodoro, it.id)
   return {
     armed: armed,
-    caption: armed ? "x again to delete" : "",
+    caption: armed ? CAPTION_ARMED : "",
     progress: armed ? "" : Model.planProgress(it),
-    focus: { mark: !armed && isFocus, ghost: !armed && !isFocus && !isDone, tooltip: "Set focus (f)" },
+    focus: { mark: !armed && isFocus, ghost: !armed && !isFocus && !isDone, held: false, tooltip: "Set focus (f)" },
     pomodoro: {
       mark: !armed && attached,
       running: attached && c.pomodoro.running === true,
       ghost: !armed && !attached && !isDone,
+      held: false,
       tooltip: "Start pomodoro (p)"
-    }
+    },
+    del: { mark: false, ghost: true, held: armed, tooltip: armed ? TIP_DELETE_ARMED : TIP_DELETE }
   }
 }
 
@@ -339,7 +350,7 @@ function actionTooltips(item, ctx) {
     done: isDone ? "Reopen (d)" : "Mark done (d)",
     focus: isDone ? doneTip : (Model.isFocused(c.focus, it.id) ? "Clear focus (f)" : "Set focus (f)"),
     pomodoro: isDone && !attached ? doneTip : pomTip,
-    del: c.armed ? "Click again to delete" : "Delete (x x)",
+    del: c.armed ? TIP_DELETE_ARMED : TIP_DELETE,
     doingEnabled: !isDone,
     focusEnabled: !isDone,
     pomodoroEnabled: !isDone || attached

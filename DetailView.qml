@@ -230,12 +230,13 @@ Column {
       onClicked: view.panel.rowKey(view.item.id, "p")
     }
 
+    // The two-click rule of `x x`: the first click arms, the second deletes.
     ActionButton {
       iconText: Model.G.del
       tooltipText: view.tips.del
       foreground: view.armed ? Color.urgent : view.fg
       hoverColor: Color.urgent
-      onClicked: view.panel.armDelete(view.item.id)
+      onClicked: view.panel.rowKey(view.item.id, "x")
     }
   }
 
