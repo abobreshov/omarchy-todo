@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "id": "tathagat11.checklist-todo",
+  "id": "abobreshov.todo",
   "name": "Checklist Todo",
-  "version": "1.0.0",
-  "author": "tathagat11",
+  "version": "2.0.0",
+  "author": "abobreshov",
   "license": "MIT",
-  "description": "A tiny todo list in the Omarchy bar: add items with a name and description, open an item to read its details, and check it off to remove it.",
+  "description": "A tiny todo list in the Omarchy bar with a focus, doing/done states, plan steps and notes; keeps its own JSON file or reads and writes through todocli.",
+  "homepage": "https://github.com/abobreshov/omarchy-todo",
   "kinds": [
     "bar-widget"
   ],
@@ -14,9 +15,21 @@
   },
   "barWidget": {
     "displayName": "Checklist Todo",
-    "description": "A tiny todo list in the bar. Add items with a name and description, click one to read it, click its checkbox to remove it.",
+    "description": "A tiny todo list in the bar. Add items with a name and description, tick them done, focus one and start a pomodoro for it.",
     "category": "Productivity",
     "allowMultiple": false,
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "defaults": {
+      "backend": "json",
+      "cliPath": "todocli",
+      "pomodoroTarget": "abobreshov.pomodoro",
+      "maxChars": 24
+    },
+    "schema": [
+      { "key": "backend", "type": "string", "label": "Store: json (the plugin's own file) or cli (todocli)", "defaultValue": "json" },
+      { "key": "cliPath", "type": "string", "label": "todocli command name or absolute path", "defaultValue": "todocli" },
+      { "key": "pomodoroTarget", "type": "string", "label": "IPC target of the pomodoro plugin", "defaultValue": "abobreshov.pomodoro" },
+      { "key": "maxChars", "type": "integer", "label": "Pill label length on horizontal bars (0 = icon only)", "defaultValue": 24, "min": 0, "max": 80 }
+    ]
   }
 }

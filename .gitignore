@@ -12,3 +12,7 @@ Thumbs.db
 
 # Local scratch
 *.log
+
+# Test scratch
+tests/.tmp/
+coverage/
