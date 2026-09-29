@@ -151,7 +151,7 @@ BarWidget {
       else if (pressedButton === Qt.MiddleButton) {
         // UX §3.4: the same function as `p` on the focus line; no focus
         // toggles the panel.
-        if (!root.panel || root.panel.startPomodoro("focus") === "no focus") root.togglePanel()
+        if (!root.panel || root.panel.startPomodoro("focus") === Model.NO_FOCUS) root.togglePanel()
       }
     }
   }

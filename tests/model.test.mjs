@@ -645,6 +645,46 @@ test("pomodoroView reads the state file the way UX §6.5 tells readers to", () =
   assert.equal(Model.formatTime(-4), "0:00");
 });
 
+test("pomodoroIntent decides p / middle click / startPomodoro (PLAN §6.9, A52; UX §3.4, §6.2)", () => {
+  const items = [item("12", "Write UX spec", "doing"), item("7", "Old", "done"), item("3", "Book", "todo")];
+  const idle = { phase: "idle", running: false, remaining: 0, taskId: "", label: "", attached: false };
+  const on12 = { phase: "work", running: true, remaining: 1122, taskId: "12", label: "Write UX spec", attached: true };
+  const base = { items, focus: { text: "", taskId: "12" }, pomodoro: idle, error: null, backend: "cli" };
+  const withOver = (over) => Object.assign({}, base, over);
+  assert.deepEqual(Model.pomodoroIntent(base, 3), { kind: "focusThenStart", item: items[2] });
+  assert.deepEqual(Model.pomodoroIntent(base, "focus"), { kind: "focusThenStart", item: items[0] }, "the focus line acts on the focus task");
+  assert.deepEqual(Model.pomodoroIntent(withOver({ pomodoro: on12 }), "12"), { kind: "pause" }, "attached: p toggles pause/resume");
+  assert.deepEqual(Model.pomodoroIntent(withOver({ pomodoro: on12 }), "focus"), { kind: "pause" });
+  assert.deepEqual(Model.pomodoroIntent(withOver({ focus: { text: "Ship it", taskId: null } }), "focus"), { kind: "startLabel", label: "Ship it" }, "free-text focus: a label-only pomodoro");
+  assert.deepEqual(Model.pomodoroIntent(withOver({ focus: { text: "", taskId: null } }), "focus"), { kind: "reply", reply: "no focus", message: "" });
+  assert.equal(Model.NO_FOCUS, "no focus");
+  assert.deepEqual(Model.pomodoroIntent(base, "99"), { kind: "reply", reply: "unknown id", message: "" });
+  assert.deepEqual(Model.pomodoroIntent(base, "7"), { kind: "reply", reply: "refused: done", message: "#7 is done · d reopens it" });
+  assert.equal(Model.pomodoroIntent(withOver({ backend: "json" }), "7").message, "Old is done · d reopens it");
+  assert.deepEqual(Model.pomodoroIntent(withOver({ error: { kind: "busy", message: "m" } }), "3"), { kind: "reply", reply: "unavailable: database busy", message: "" });
+  assert.deepEqual(Model.pomodoroIntent(withOver({ error: { kind: "busy" }, pomodoro: on12 }), "12"), { kind: "pause" }, "pausing needs no write");
+  assert.deepEqual(Model.pomodoroIntent(withOver({ error: { kind: "busy" }, focus: { text: "Ship it", taskId: null } }), "focus"), { kind: "startLabel", label: "Ship it" }, "a label-only start needs no write");
+  assert.deepEqual(Model.pomodoroIntent({}, "focus"), { kind: "reply", reply: "no focus", message: "" });
+});
+
+test("pomodoroMessage maps the startFor result to the UX §6.2 / §7 transients", () => {
+  const ctx = { remaining: 1122, backend: "cli", target: "abobreshov.pomodoro" };
+  assert.equal(Model.pomodoroMessage({ ok: true, word: "started" }, item("15", "Fifteen", "doing"), ctx), "");
+  assert.equal(Model.pomodoroMessage({ ok: true, word: "retargeted" }, item("15", "Fifteen", "doing"), ctx), "Pomodoro moved to #15 · 18:42 left");
+  assert.equal(Model.pomodoroMessage({ ok: true, word: "retargeted" }, null, ctx), "", "a label-only retarget names no task");
+  assert.equal(Model.pomodoroMessage({ ok: false, kind: "missing" }, null, ctx), "Pomodoro plugin not found. Enable abobreshov.pomodoro.");
+  assert.equal(Model.pomodoroMessage({ ok: false, kind: "old" }, null, ctx), "Pomodoro plugin is out of date. Update abobreshov.pomodoro.");
+  assert.equal(Model.pomodoroMessage({ ok: false, kind: "transient", text: "omarchy-shell is not running" }, null, ctx), "Pomodoro not started — omarchy-shell is not running.");
+});
+
+test("listRows puts the focus line first, then the sorted items (UX §4.2)", () => {
+  const f1 = { variant: "F1", item: item("12", "W", "doing"), selectable: true };
+  assert.deepEqual(Model.listRows(f1, [item("3", "B", "todo")]), [{ kind: "focus", item: f1.item, selectable: true }, { kind: "item", item: item("3", "B", "todo"), selectable: true }]);
+  assert.deepEqual(Model.listRows({ variant: "F0", item: null, selectable: false }, []), [{ kind: "focus", item: null, selectable: false }]);
+  assert.deepEqual(Model.listRows(null, [item("3", "B", "todo")]), [{ kind: "item", item: item("3", "B", "todo"), selectable: true }]);
+  assert.deepEqual(Model.listRows(null, null), []);
+});
+
 test("focusLine renders the UX §4.2 variants F0–F6", () => {
   const items = [item("12", "Write UX spec for the panels", "doing"), item("15", "Review PR !412", "doing"), item("2", "Book", "todo")];
   const pomIdle = { phase: "idle", running: false, remaining: 0, taskId: "", label: "", attached: false };

@@ -39,6 +39,7 @@ var G = {
 
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+var NO_FOCUS = "no focus"
 var MSG_SYNC_NEEDS_CLI = "Sync needs backend = cli."
 var MSG_SYNC_RUNNING = "Sync already running."
 var MSG_DONE_ATTACHED = "Done. p on the next task moves the pomodoro."
@@ -854,6 +855,40 @@ function helpLine(view, backend) {
 
 // ---------------------------------------------------------------- pomodoro
 
+// `p` / middle click / IPC startPomodoro (PLAN §6.9, A52; UX §3.4, §6.2):
+// what the panel should do for `id` ("focus" = the focus line). The task
+// the pomodoro is attached to toggles pause/resume; a free-text focus starts
+// a label-only pomodoro; anything else focuses the task first and starts
+// only after that write succeeds. `state`: {items, focus, pomodoro, error,
+// backend}. Returns {kind: "pause"} | {kind: "startLabel", label} |
+// {kind: "focusThenStart", item} | {kind: "reply", reply, message}.
+function pomodoroIntent(state, id) {
+  var s = state || {}
+  var reply = function(text, message) { return { kind: "reply", reply: text, message: message || "" } }
+  var it
+  if (String(id) === "focus") {
+    it = focusTask(s.items, s.focus)
+    if (!it) return s.focus && s.focus.text ? { kind: "startLabel", label: s.focus.text } : reply(NO_FOCUS)
+  } else {
+    it = findItem(s.items, id)
+    if (!it) return reply("unknown id")
+  }
+  if (isAttached(s.pomodoro, it.id)) return { kind: "pause" }
+  if (s.error) return reply(unavailable(s.error))
+  if (it.status === "done") return reply("refused: done", msgDoneRow(it, s.backend))
+  return { kind: "focusThenStart", item: it }
+}
+
+// The transient for a `startFor` result (UX §6.2, §7 E11/E12); "" for none.
+// `item` is the task the call was for, null for a label-only start.
+function pomodoroMessage(result, item, ctx) {
+  var c = ctx || {}
+  if (result.ok) return result.word === "retargeted" && item ? msgPomodoroMoved(item, c.remaining, c.backend) : ""
+  if (result.kind === "missing") return msgPomodoroMissing(c.target)
+  if (result.kind === "old") return msgPomodoroOld(c.target)
+  return msgPomodoroNotStarted(result.text)
+}
+
 // `omarchy-shell <target> startFor …` result (PLAN A52, _verified L61).
 function classifyShell(code, stdout, stderr, spawnFailed) {
   if (spawnFailed) return { ok: false, kind: "transient", text: "omarchy-shell not found" }
@@ -921,6 +956,16 @@ function focusLine(items, focus, pomodoro) {
   base.text = "No focus · f on a task sets it"
   base.selectable = false
   return base
+}
+
+// The cursor rows of the list view: the focus line (row 0) when shown, then
+// the sorted items (UX §4.2).
+function listRows(focusLine, listItems) {
+  var out = []
+  if (focusLine) out.push({ kind: "focus", item: focusLine.item, selectable: focusLine.selectable })
+  var list = listItems || []
+  for (var i = 0; i < list.length; i++) out.push({ kind: "item", item: list[i], selectable: true })
+  return out
 }
 
 function planProgress(item) {

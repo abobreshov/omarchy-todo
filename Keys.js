@@ -184,7 +184,7 @@ function handleDelete(ui, ctx, now, actions) {
   ui.armedAt = now
 }
 
-// Events: open, close, showError, clearError, selectTask{id}, key{key,now},
+// Events: open, close, storeError{error}, selectTask{id}, key{key,now},
 // text{text}, enter, space, esc, tab{direction}, move{dx,dy}, hover{index},
 // delete{now}, tick{now}. `ctx`: { rows, steps, backend, focus,
 // sessionDone, pomodoro, prefill }.
@@ -207,12 +207,12 @@ function reduceUi(ui, event, ctx) {
       next.help = false
       leaveCompose(next)
       break
-    case "showError":
-      next.view = "error"
-      disarm(next)
-      break
-    case "clearError":
-      if (next.view === "error") next.view = "list"
+    case "storeError":
+      // E4/E7/E8 replace the list body; E5 (busy) is a banner above it.
+      if (ev.error && ev.error.kind !== "busy") {
+        next.view = "error"
+        disarm(next)
+      } else if (next.view === "error") next.view = "list"
       break
     case "selectTask":
       openDetail(next, String(ev.id))

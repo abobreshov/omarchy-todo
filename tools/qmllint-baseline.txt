@@ -36,7 +36,6 @@
 ./Panel.qml: Member "md" not found on type "QObject" [missing-property]
 ./Panel.qml: Member "subtitle" not found on type "QObject" [missing-property]
 ./Panel.qml: Member "title" not found on type "QObject" [missing-property]
-./PomodoroLink.qml: Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies? [signal-handler-parameters]
 ./StatusFooter.qml: Member "caption" not found on type "QObject" [missing-property]
 ./StatusFooter.qml: Member "controlGap" not found on type "QObject" [missing-property]
 ./StatusFooter.qml: Member "family" not found on type "QObject" [missing-property]

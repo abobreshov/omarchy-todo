@@ -53,7 +53,6 @@ Panel {
   readonly property var liveSessionDone: Model.pruneSessionDone(sessionDone, items)
   property string message: ""
   property double clockNow: Date.now()
-  property var pendingPomodoroItem: null
 
   readonly property var items: store.items
   readonly property var focusModel: store.focus
@@ -63,12 +62,7 @@ Panel {
   readonly property var listItems: Model.sortForList(Model.visibleItems(items, liveSessionDone), liveSessionDone)
   readonly property var focusLineModel: Model.focusLine(items, focusModel, pomodoro)
   readonly property int firstRow: focusLineModel ? 1 : 0
-  readonly property var rows: {
-    var out = []
-    if (focusLineModel) out.push({ kind: "focus", item: focusLineModel.item, selectable: focusLineModel.selectable })
-    for (var i = 0; i < listItems.length; i++) out.push({ kind: "item", item: listItems[i], selectable: true })
-    return out
-  }
+  readonly property var rows: Model.listRows(focusLineModel, listItems)
   readonly property var detailItem: Model.findItem(items, ui.selectedId)
   readonly property var pill: Model.pillState({
     backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
@@ -91,13 +85,7 @@ Panel {
   // Component.onCompleted.
   property bool ready: false
 
-  // The error view replaces the list body for E4/E7/E8; E5 is a banner
-  // above the list, so it leaves the error view like no error does.
-  onStoreErrorChanged: {
-    if (!ready) return
-    if (storeError && storeError.kind !== "busy") dispatch({ type: "showError" })
-    else dispatch({ type: "clearError" })
-  }
+  onStoreErrorChanged: if (ready) dispatch({ type: "storeError", error: storeError })
 
   // Deferred so every setting derived from the new `settings` object (the
   // cli path in particular) has settled before the other store loads.
@@ -106,7 +94,6 @@ Panel {
   function applyBackend() {
     sessionDone = ({})
     message = ""
-    dispatch({ type: "clearError" })
     store.load()
   }
 
@@ -258,40 +245,22 @@ Panel {
 
   function syncNow() { return store.syncNow() }
 
-  // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): focus first, and
-  // `startFor` only after the focus write exits 0; the attached task toggles
-  // pause/resume; a free-text focus starts a label-only pomodoro.
+  // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): Model decides,
+  // this executes; `startFor` runs only after the focus write exits 0.
   function startPomodoro(id) {
-    var key = String(id)
-    var it = null
-    if (key === "focus") {
-      it = Model.focusTask(items, focusModel)
-      if (!it) {
-        if (focusModel && focusModel.text) {
-          pendingPomodoroItem = null
-          pomo.startFor("", focusModel.text)
-          return "ok"
-        }
-        return "no focus"
+    var intent = Model.pomodoroIntent({ items: items, focus: focusModel, pomodoro: pomodoro, error: store.error, backend: backend }, id)
+    switch (intent.kind) {
+      case "pause": pomo.pause(); break
+      case "startLabel": pomo.startFor(null, intent.label); break
+      case "focusThenStart": {
+        var task = intent.item
+        var reply = store.perform({ type: "focus", id: task.id }, function(err) { if (!err) pomo.startFor(task) })
+        if (reply !== "ok") { showMessage(reply); return reply }
+        break
       }
-    } else {
-      it = Model.findItem(items, key)
-      if (!it) return "unknown id"
-    }
-    if (pomodoro.phase !== "idle" && pomodoro.taskId === it.id) {
-      pomo.pause()
-      return "ok"
-    }
-    if (errored) return Model.unavailable(store.error)
-    var task = it
-    var reply = store.perform({ type: "focus", id: task.id }, function(err) {
-      if (err) return
-      pendingPomodoroItem = task
-      pomo.startFor(task.id, task.name)
-    })
-    if (reply !== "ok") {
-      showMessage(reply === "refused: done" ? Model.msgDoneRow(task, backend) : reply)
-      return reply
+      default:
+        if (intent.message !== "") showMessage(intent.message)
+        return intent.reply
     }
     return "ok"
   }
@@ -321,14 +290,9 @@ Panel {
     id: pomo
     target: root.pomodoroTarget
     opened: root.opened
-    onResult: function(r) {
-      if (r.ok) {
-        if (r.word === "retargeted" && root.pendingPomodoroItem)
-          root.showMessage(Model.msgPomodoroMoved(root.pendingPomodoroItem, root.pomodoro.remaining, root.backend))
-      } else if (r.kind === "missing") root.showMessage(Model.msgPomodoroMissing(root.pomodoroTarget))
-      else if (r.kind === "old") root.showMessage(Model.msgPomodoroOld(root.pomodoroTarget))
-      else root.showMessage(Model.msgPomodoroNotStarted(r.text))
-      root.pendingPomodoroItem = null
+    onResult: function(r, item) {
+      var text = Model.pomodoroMessage(r, item, { remaining: root.pomodoro.remaining, backend: root.backend, target: root.pomodoroTarget })
+      if (text !== "") root.showMessage(text)
     }
   }
 

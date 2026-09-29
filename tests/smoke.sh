@@ -91,7 +91,8 @@ qs ipc -p "$root" call smoke settings "{\"backend\":\"cli\",\"cliPath\":\"$fake\
 sleep 0.8
 check "AC-13.1 cli read shows the store" "$(dump | field 'd["open"]')" "[{'id': '3', 'title': 'Wire the webhook', 'status': 'doing'}]"
 check "dump.cliPath is the wrapper" "$(dump | field 'd["cliPath"]')" "$fake"
-check "footer from the sync block" "$(dump | field 'd["footer"]["text"]')" "Basecamp sync failed just now · R retry"
+# The fixture's lastAttemptAt is fixed, so the relative time is not.
+check "footer from the sync block" "$(dump | field 'd["footer"]["text"].startswith("Basecamp sync failed ") and d["footer"]["text"].endswith(" · R retry")')" "True"
 check "pill sync overlay" "$(dump | field 'd["pill"]["glyph"]')" "$(python3 -c 'print(chr(0xF04E7))')"
 check "add accepted" "$(call add 'Buy milk --json' 'Semi-skimmed')" "Buy milk --json"
 sleep 0.6

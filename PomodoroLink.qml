@@ -6,10 +6,12 @@ import "Argv.js" as Argv
 
 // The hand-off to the pomodoro plugin (PLAN §6.9, A52; UX §6). `startFor`
 // and `pause` run `omarchy-shell <target> <fn> …` as a plain argv Process so
-// the result word and omarchy-shell's `fail()` text are observable. The
-// timer display comes from the pomodoro's state file, watched through its
-// directory (atomic writes replace the inode); the pomodoro is never polled
-// over IPC. Readers treat `running && now > endsAt + 10 s` as idle.
+// the result word and omarchy-shell's `fail()` text are observable; a call
+// made while one runs waits for it (the last one wins), and `result` names
+// the task each call was for. The timer display comes from the pomodoro's
+// state file, watched through its directory (atomic writes replace the
+// inode); the pomodoro is never polled over IPC. Readers treat
+// `running && now > endsAt + 10 s` as idle.
 QtObject {
   id: link
 
@@ -20,19 +22,25 @@ QtObject {
   readonly property var view: Model.pomodoroView(state, now)
   readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/abobreshov.pomodoro/"
 
-  // {ok: true, word} or {ok: false, kind: missing|old|transient, text}
-  signal result(var r)
+  // {ok: true, word} or {ok: false, kind: missing|old|transient, text},
+  // with the item the call was for (null for a label-only start or a pause).
+  signal result(var r, var item)
 
-  function startFor(taskId, title) {
-    if (proc.running) return
-    proc.command = Argv.pomodoro(target, "startFor", [String(taskId || ""), Argv.sanitizeLabel(title)])
-    proc.running = true
+  property var request: null   // the call in flight: {argv, item}
+  property var next: null      // the call asked for meanwhile
+
+  // `item` starts on that task; a null item starts a label-only pomodoro.
+  function startFor(item, label) {
+    call("startFor", [item ? item.id : "", Argv.sanitizeLabel(item ? item.name : label)], item)
   }
 
-  function pause() {
-    if (proc.running) return
-    proc.command = Argv.pomodoro(target, "pause", [])
-    proc.running = true
+  function pause() { call("pause", [], null) }
+
+  function call(fn, args, item) {
+    var job = { argv: Argv.pomodoro(target, fn, args), item: item || null }
+    if (proc.running) { next = job; return }
+    request = job
+    proc.run(job.argv)
   }
 
   function tick() { now = Date.now() }
@@ -42,21 +50,17 @@ QtObject {
     dirWatch.reload()
   }
 
-  property bool procStarted: false
-
-  property Process proc: Process {
-    stdout: StdioCollector { id: out; waitForEnd: true }
-    stderr: StdioCollector { id: err; waitForEnd: true }
-    onStarted: link.procStarted = true
-    onExited: function(exitCode) {
-      var r = Model.classifyShell(exitCode, out.text, err.text, false)
-      link.result(r)
+  property ArgvProcess proc: ArgvProcess {
+    onFinished: function(code, spawnFailed, out, err) {
+      var r = Model.classifyShell(code, out, err, spawnFailed)
+      link.result(r, link.request ? link.request.item : null)
       if (r.ok) link.rearm()
     }
-    onRunningChanged: {
-      if (running) return
-      if (!link.procStarted) link.result(Model.classifyShell(-1, "", "", true))
-      link.procStarted = false
+    onStopped: {
+      var job = link.next
+      link.next = null
+      link.request = job
+      if (job) link.proc.run(job.argv)
     }
   }
 
