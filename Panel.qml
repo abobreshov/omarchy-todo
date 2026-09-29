@@ -74,7 +74,12 @@ Panel {
   readonly property var errorModel: backend === "cli" ? Model.errorView(store.error, { cliPath: cliPath, moduleName: moduleName, lastGoodAt: cliStore.lastGoodAt }) : null
   readonly property string banner: backend === "cli" ? (errorModel && errorModel.banner ? errorModel.banner : "") : store.banner
   readonly property bool cliError: backend === "cli" && store.error !== null
-  readonly property string emptyCopy: Model.emptyCopy(items) || ""
+  // E3: the empty-state copy waits for the first read; cli mode shows
+  // `Loading…` instead, and only once the first read has taken 300 ms.
+  readonly property bool loading: backend === "cli" && !store.loaded && store.error === null
+  property bool loadingShown: false
+  readonly property string emptyCopy: loading ? (loadingShown ? "Loading\u2026" : "") : (store.loaded ? (Model.emptyCopy(items) || "") : "")
+  onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
   // Change handlers below write `ui`; during construction the first
   // evaluation of a readonly binding also emits its change signal, which
@@ -364,6 +369,13 @@ Panel {
     target: root.store
     function onFailed(error) { root.showMessage(Model.msgNotSaved(error)) }
     function onSyncFinished(result) { if (!result.ok && result.message) root.showMessage(result.message) }
+  }
+
+  Timer {
+    interval: 300
+    repeat: false
+    running: root.loading
+    onTriggered: root.loadingShown = true
   }
 
   Timer {
