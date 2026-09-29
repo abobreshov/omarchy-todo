@@ -49,6 +49,8 @@ BarWidget {
   function closeForPopoutSwitch() { if (panel) panel.closeForPopoutSwitch() }
   // The `refresh()` IPC push lands on one instance and is relayed here.
   function refresh() { if (panel) panel.refresh() }
+  // One Model.js action per mutating IPC function, with upstream's replies.
+  function perform(action) { return panel ? Model.ipcReply(action, panel.perform(action)) : "unavailable" }
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -89,16 +91,10 @@ BarWidget {
 
     // Upstream surface, arities and replies kept (DECISIONS A-R2.1).
     // `omarchy-shell abobreshov.todo add "Buy milk" "Semi-skimmed"`.
-    function add(name: string, description: string): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.addItem(name, description)
-    }
+    function add(name: string, description: string): string { return root.perform({ type: "add", name: name, description: description }) }
 
     // `omarchy-shell abobreshov.todo remove <id>`.
-    function remove(id: string): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.deleteItem(id)
-    }
+    function remove(id: string): string { return root.perform({ type: "remove", id: id }) }
 
     function status(): string {
       return root.itemCount + " todo" + (root.itemCount === 1 ? "" : "s")
@@ -106,24 +102,13 @@ BarWidget {
 
     // Fork additions (UX §10.3). Replies mean accepted, not committed, in
     // cli mode; `unavailable: <reason>` from a known error state.
-    function setStatus(id: string, status: string): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.setStatus(id, status)
-    }
-
-    function focus(id: string): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.setFocus(id)
-    }
+    function setStatus(id: string, status: string): string { return root.perform({ type: "setStatus", id: id, status: status }) }
+    function focus(id: string): string { return root.perform({ type: "focus", id: id }) }
+    function toggleStep(id: string, n: string): string { return root.perform({ type: "toggleStep", id: id, n: n }) }
 
     function startPomodoro(id: string): string {
       if (!root.panel) return "unavailable"
       return root.panel.startPomodoro(id)
-    }
-
-    function toggleStep(id: string, n: string): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.toggleStep(id, n)
     }
 
     function openTask(id: string): string {

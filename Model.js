@@ -321,77 +321,123 @@ function unavailable(error) {
 }
 
 // ---------------------------------------------------------------- mutations
-// Each returns new arrays; the inputs are never touched, so a failed cli
-// write can be reverted by keeping the previous value.
+// One action vocabulary, shared by the keys (Keys.js emits it), the argv
+// (Argv.forAction maps it to a todocli command) and both stores (they apply
+// it through `reduce`):
+//   {type: "add", name, description}   {type: "setStatus", id, status}
+//   {type: "focus", id | "clear"}      {type: "toggleStep", id, n}
+//   {type: "remove", id}
+// Every mutator returns the same shape, {ok, doc: {items, focus}, reply,
+// action, item}: new arrays and the inputs untouched, so a failed cli write
+// is reverted by keeping the previous doc; `reply` is the IPC reply of UX
+// §10.3 (the clean name for add, "ok", or the refusal); `action` is the
+// normalised action to persist (squished text, string ids, numeric step).
 
-function addItem(items, name, description) {
-  var cleanName = squish(name)
-  if (cleanName === "") return { items: items, item: null, reply: "empty" }
-  var item = normalize({ id: makeId(), name: cleanName, description: description, status: "todo" })
-  var next = (items || []).slice()
-  next.push(item)
-  return { items: next, item: item, reply: cleanName }
+function docOf(doc) {
+  var d = doc || {}
+  return { items: d.items || [], focus: normalizeFocus(d.focus, null) }
 }
 
+function refused(doc, reply) { return { ok: false, doc: doc, reply: reply, action: null, item: null } }
+
+function accepted(doc, reply, action, item) { return { ok: true, doc: doc, reply: reply, action: action, item: item || null } }
+
 function replaceItem(items, id, updater) {
-  var next = []
-  var list = items || []
-  for (var i = 0; i < list.length; i++) {
-    if (list[i] && list[i].id === String(id)) {
-      var copy = copyItem(list[i])
-      updater(copy)
-      next.push(copy)
-    } else next.push(list[i])
-  }
-  return next
+  return items.map(function(it) {
+    if (!it || it.id !== String(id)) return it
+    var copy = copyItem(it)
+    updater(copy)
+    return copy
+  })
 }
 
 function clearFocusIf(focus, id) {
-  var f = focus || { text: "", taskId: null }
-  return { text: f.text || "", taskId: f.taskId === String(id) ? null : (f.taskId === undefined ? null : f.taskId) }
+  return { text: focus.text, taskId: focus.taskId === String(id) ? null : focus.taskId }
+}
+
+function addItem(doc, name, description) {
+  var d = docOf(doc)
+  var cleanName = squish(name)
+  if (cleanName === "") return refused(d, "empty")
+  var item = normalize({ id: makeId(), name: cleanName, description: description, status: "todo" })
+  return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, { type: "add", name: cleanName, description: item.description }, item)
 }
 
 function setStatus(doc, id, status) {
-  var items = doc.items || []
-  var focus = doc.focus || { text: "", taskId: null }
+  var d = docOf(doc)
   var s = normalizeStatus(status)
-  if (s !== String(status)) return { items: items, focus: focus, reply: "bad status" }
-  if (!findItem(items, id)) return { items: items, focus: focus, reply: "unknown id" }
-  var next = replaceItem(items, id, function(it) { it.status = s })
+  if (s !== String(status)) return refused(d, "bad status")
+  if (!findItem(d.items, id)) return refused(d, "unknown id")
+  var items = replaceItem(d.items, id, function(it) { it.status = s })
   // A focused task is always doing: leaving doing clears the link, the
   // free text stays (PRODUCT UC-5 A2b).
-  var nextFocus = s === "doing" ? { text: focus.text || "", taskId: focus.taskId === undefined ? null : focus.taskId } : clearFocusIf(focus, id)
-  return { items: next, focus: nextFocus, reply: "ok" }
+  var focus = s === "doing" ? d.focus : clearFocusIf(d.focus, id)
+  return accepted({ items: items, focus: focus }, "ok", { type: "setStatus", id: String(id), status: s })
 }
 
 function setFocus(doc, idOrClear) {
-  var items = doc.items || []
-  var focus = doc.focus || { text: "", taskId: null }
-  if (String(idOrClear) === "clear") return { items: items, focus: { text: focus.text || "", taskId: null }, reply: "ok" }
-  var it = findItem(items, idOrClear)
-  if (!it) return { items: items, focus: focus, reply: "unknown id" }
-  if (it.status === "done") return { items: items, focus: focus, reply: "refused: done" }
-  var next = replaceItem(items, idOrClear, function(c) { c.status = "doing" })
-  return { items: next, focus: { text: focus.text || "", taskId: String(idOrClear) }, reply: "ok" }
+  var d = docOf(doc)
+  var key = String(idOrClear)
+  if (key === "clear") return accepted({ items: d.items, focus: { text: d.focus.text, taskId: null } }, "ok", { type: "focus", id: "clear" })
+  var it = findItem(d.items, key)
+  if (!it) return refused(d, "unknown id")
+  if (it.status === "done") return refused(d, "refused: done")
+  var items = replaceItem(d.items, key, function(c) { c.status = "doing" })
+  return accepted({ items: items, focus: { text: d.focus.text, taskId: key } }, "ok", { type: "focus", id: key })
 }
 
-function toggleStep(items, id, n) {
-  var it = findItem(items, id)
-  if (!it) return { items: items, reply: "unknown id" }
+function toggleStep(doc, id, n) {
+  var d = docOf(doc)
+  var it = findItem(d.items, id)
+  if (!it) return refused(d, "unknown id")
   var index = Number(n)
-  if (!(index >= 1) || index > it.plan.length || Math.floor(index) !== index) return { items: items, reply: "bad step" }
-  var next = replaceItem(items, id, function(c) { c.plan[index - 1].done = !c.plan[index - 1].done })
-  return { items: next, reply: "ok" }
+  if (!(index >= 1) || index > it.plan.length || Math.floor(index) !== index) return refused(d, "bad step")
+  var items = replaceItem(d.items, id, function(c) { c.plan[index - 1].done = !c.plan[index - 1].done })
+  return accepted({ items: items, focus: d.focus }, "ok", { type: "toggleStep", id: String(id), n: index })
 }
 
 function removeItem(doc, id) {
-  var items = doc.items || []
-  var focus = doc.focus || { text: "", taskId: null }
-  if (!findItem(items, id)) return { items: items, focus: focus, reply: "unknown id" }
-  var next = []
-  for (var i = 0; i < items.length; i++)
-    if (items[i] && items[i].id !== String(id)) next.push(items[i])
-  return { items: next, focus: clearFocusIf(focus, id), reply: "ok" }
+  var d = docOf(doc)
+  if (!findItem(d.items, id)) return refused(d, "unknown id")
+  var items = d.items.filter(function(it) { return it && it.id !== String(id) })
+  return accepted({ items: items, focus: clearFocusIf(d.focus, id) }, "ok", { type: "remove", id: String(id) })
+}
+
+function reduce(doc, action) {
+  var a = action || {}
+  switch (a.type) {
+    case "add": return addItem(doc, a.name, a.description)
+    case "setStatus": return setStatus(doc, a.id, a.status)
+    case "focus": return setFocus(doc, a.id)
+    case "toggleStep": return toggleStep(doc, a.id, a.n)
+    case "remove": return removeItem(doc, a.id)
+    default: return refused(docOf(doc), "unknown action")
+  }
+}
+
+// The IPC surface keeps upstream's replies (A-R2.1): `remove` answers "ok"
+// whatever the id.
+function ipcReply(action, reply) {
+  return action.type === "remove" && reply === "unknown id" ? "ok" : reply
+}
+
+function isAttached(pomodoro, id) {
+  return !!pomodoro && pomodoro.phase !== "idle" && pomodoro.taskId === String(id)
+}
+
+// `d` on an open row (UX §4.2 done handling): remember its pre-tick status
+// so it keeps its place until the panel closes (UI-14), and say so when the
+// pomodoro is attached to it (UX §6.4). null for any other action.
+function tickDone(state, action) {
+  var a = action || {}
+  if (a.type !== "setStatus" || a.status !== "done") return null
+  var it = findItem(state.items, a.id)
+  if (!it || it.status === "done") return null
+  var next = {}
+  var map = state.sessionDone || {}
+  for (var k in map) next[k] = map[k]
+  next[it.id] = it.status
+  return { sessionDone: next, message: isAttached(state.pomodoro, it.id) ? MSG_DONE_ATTACHED : "" }
 }
 
 // ---------------------------------------------------------------- views

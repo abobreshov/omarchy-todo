@@ -164,13 +164,10 @@ Panel {
 
   function apply(action) {
     switch (action.type) {
-      case "add": noteReply(addItem(action.name, action.description)); break
-      case "setStatus": noteReply(setStatus(action.id, action.status)); break
-      case "focus": noteReply(setFocus(action.id)); break
+      case "add": case "setStatus": case "focus": case "toggleStep": case "remove":
+        noteReply(perform(action)); break
       case "startPomodoro": noteReply(startPomodoro(action.id)); break
       case "pausePomodoro": pomo.pause(); break
-      case "toggleStep": noteReply(toggleStep(action.id, action.n)); break
-      case "remove": noteReply(deleteItem(action.id)); break
       case "refresh": refresh(); break
       case "syncNow": syncNow(); break
       case "message": showMessage(action.text); break
@@ -226,43 +223,19 @@ Panel {
     if (action) apply(action)
   }
   function tickRow(id) { rowKey(id, "d") }
-  function toggleStepAt(n) { if (detailItem) toggleStep(detailItem.id, n) }
+  function toggleStepAt(n) { if (detailItem) perform({ type: "toggleStep", id: detailItem.id, n: n }) }
 
-  function markSessionDone(id, previous) {
-    var next = {}
-    for (var k in sessionDone) next[k] = sessionDone[k]
-    next[String(id)] = previous
-    sessionDone = next
-  }
-
-  // ---- operations: the IPC functions and the keys call these
-  function addItem(name, description) {
-    return store.add(name, description)
-  }
-
-  function deleteItem(id) {
-    var reply = store.remove(id)
-    return reply.indexOf("unavailable") === 0 ? reply : "ok"
-  }
-
-  function setStatus(id, status) {
-    var it = Model.findItem(items, id)
-    var previous = it ? it.status : "todo"
-    var reply = store.setStatus(id, status)
-    if (reply !== "ok") return reply
-    if (status === "done") {
-      if (previous !== "done") markSessionDone(id, previous)
-      if (pomodoro.phase !== "idle" && pomodoro.taskId === String(id)) showMessage(Model.MSG_DONE_ATTACHED)
+  // ---- operations: the IPC functions, the keys and the buttons call these.
+  // Every mutation goes through the store's perform; ticking a row done
+  // remembers its pre-tick position first (UI-14).
+  function perform(action) {
+    var tick = Model.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
+    var reply = store.perform(action, null)
+    if (tick && reply === "ok") {
+      sessionDone = tick.sessionDone
+      if (tick.message !== "") showMessage(tick.message)
     }
-    return "ok"
-  }
-
-  function setFocus(idOrClear) {
-    return store.setFocus(idOrClear, null)
-  }
-
-  function toggleStep(id, n) {
-    return store.toggleStep(id, n)
+    return reply
   }
 
   function openTask(id) {
@@ -315,7 +288,7 @@ Panel {
     }
     if (cliError) return Model.unavailable(store.error)
     var task = it
-    var reply = store.setFocus(task.id, function(err) {
+    var reply = store.perform({ type: "focus", id: task.id }, function(err) {
       if (err) return
       pendingPomodoroItem = task
       pomo.startFor(task.id, task.name)

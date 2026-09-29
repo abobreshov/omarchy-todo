@@ -98,50 +98,16 @@ QtObject {
   function load() { ensureDirProc.running = true }
   function refresh() { reloadFromDisk(); return "ok" }
 
-  // ---- mutations (synchronous; replies are final, as upstream)
-  function add(name, description) {
-    var r = Model.addItem(items, name, description)
-    if (r.reply === "empty") return "empty"
-    items = r.items
+  // ---- mutations (synchronous; replies are final, as upstream). `done`
+  //      runs one turn later so both stores call it after the reply.
+  function perform(action, done) {
+    var r = Model.reduce({ items: items, focus: focus }, action)
+    if (!r.ok) return r.reply
+    items = r.doc.items
+    focus = r.doc.focus
     scheduleSave()
+    if (done) Qt.callLater(done, null)
     return r.reply
-  }
-
-  function setStatus(id, status) {
-    var r = Model.setStatus({ items: items, focus: focus }, id, status)
-    if (r.reply !== "ok") return r.reply
-    items = r.items
-    focus = r.focus
-    scheduleSave()
-    return "ok"
-  }
-
-  function setFocus(idOrClear, done) {
-    var r = Model.setFocus({ items: items, focus: focus }, idOrClear)
-    if (r.reply === "ok") {
-      items = r.items
-      focus = r.focus
-      scheduleSave()
-    }
-    if (typeof done === "function") done(r.reply === "ok" ? null : r.reply)
-    return r.reply
-  }
-
-  function toggleStep(id, n) {
-    var r = Model.toggleStep(items, id, n)
-    if (r.reply !== "ok") return r.reply
-    items = r.items
-    scheduleSave()
-    return "ok"
-  }
-
-  function remove(id) {
-    var r = Model.removeItem({ items: items, focus: focus }, id)
-    if (r.reply !== "ok") return r.reply
-    items = r.items
-    focus = r.focus
-    scheduleSave()
-    return "ok"
   }
 
   function syncNow() { return Model.MSG_SYNC_NEEDS_CLI }

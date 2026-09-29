@@ -190,15 +190,19 @@ test("errorShort and unavailable replies", () => {
 
 // ------------------------------------------------------------- mutations
 test("addItem squishes, refuses an empty name and returns the clean name", () => {
-  const r = Model.addItem([], "  Buy   milk ", " semi ");
+  const r = Model.addItem({ items: [], focus: { text: "", taskId: null } }, "  Buy   milk ", " semi ");
+  assert.equal(r.ok, true);
   assert.equal(r.reply, "Buy milk");
-  assert.equal(r.items.length, 1);
-  assert.equal(r.items[0].status, "todo");
-  assert.equal(r.items[0].description, "semi");
-  assert.equal(r.item.id, r.items[0].id);
-  const empty = Model.addItem(r.items, "   ", "x");
+  assert.equal(r.doc.items.length, 1);
+  assert.equal(r.doc.items[0].status, "todo");
+  assert.equal(r.doc.items[0].description, "semi");
+  assert.equal(r.item.id, r.doc.items[0].id);
+  assert.deepEqual(r.action, { type: "add", name: "Buy milk", description: "semi" }, "the store persists the normalised action");
+  const empty = Model.addItem(r.doc, "   ", "x");
+  assert.equal(empty.ok, false);
   assert.equal(empty.reply, "empty");
-  assert.equal(empty.items, r.items);
+  assert.equal(empty.doc.items, r.doc.items);
+  assert.equal(empty.action, null);
 });
 
 test("setStatus: done and todo clear the focus link, doing keeps it, unknown ids and bad statuses are refused", () => {
@@ -206,13 +210,15 @@ test("setStatus: done and todo clear the focus link, doing keeps it, unknown ids
   const focus = { text: "T", taskId: "1" };
   let r = Model.setStatus({ items, focus }, "1", "done");
   assert.equal(r.reply, "ok");
-  assert.equal(r.items[0].status, "done");
-  assert.deepEqual(r.focus, { text: "T", taskId: null });
+  assert.equal(r.doc.items[0].status, "done");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: null });
+  assert.deepEqual(r.action, { type: "setStatus", id: "1", status: "done" });
   r = Model.setStatus({ items, focus }, "1", "todo");
-  assert.equal(r.focus.taskId, null);
-  r = Model.setStatus({ items, focus }, "2", "doing");
-  assert.equal(r.items[1].status, "doing");
-  assert.equal(r.focus.taskId, "1");
+  assert.equal(r.doc.focus.taskId, null);
+  r = Model.setStatus({ items, focus }, 2, "doing");
+  assert.equal(r.doc.items[1].status, "doing");
+  assert.equal(r.doc.focus.taskId, "1");
+  assert.equal(r.action.id, "2", "ids are stringified");
   assert.equal(Model.setStatus({ items, focus }, "9", "done").reply, "unknown id");
   assert.equal(Model.setStatus({ items, focus }, "1", "nope").reply, "bad status");
   assert.equal(items[0].status, "doing", "inputs are not mutated");
@@ -221,44 +227,102 @@ test("setStatus: done and todo clear the focus link, doing keeps it, unknown ids
 test("setFocus links a task (making it doing), refuses done, clears", () => {
   const items = [item("1", "A", "todo"), item("2", "B", "done")];
   const focus = { text: "T", taskId: null };
-  let r = Model.setFocus({ items, focus }, "1");
+  let r = Model.setFocus({ items, focus }, 1);
   assert.equal(r.reply, "ok");
-  assert.equal(r.items[0].status, "doing");
-  assert.deepEqual(r.focus, { text: "T", taskId: "1" });
+  assert.equal(r.doc.items[0].status, "doing");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: "1" });
+  assert.deepEqual(r.action, { type: "focus", id: "1" });
   assert.equal(Model.setFocus({ items, focus }, "2").reply, "refused: done");
   assert.equal(Model.setFocus({ items, focus }, "7").reply, "unknown id");
-  r = Model.setFocus({ items: r.items, focus: r.focus }, "clear");
+  r = Model.setFocus(r.doc, "clear");
   assert.equal(r.reply, "ok");
-  assert.deepEqual(r.focus, { text: "T", taskId: null });
-  assert.equal(r.items[0].status, "doing", "clearing the focus keeps the task doing (§3.6)");
+  assert.deepEqual(r.doc.focus, { text: "T", taskId: null });
+  assert.deepEqual(r.action, { type: "focus", id: "clear" });
+  assert.equal(r.doc.items[0].status, "doing", "clearing the focus keeps the task doing (§3.6)");
 });
 
 test("toggleStep flips one step, 1-based, and refuses bad input", () => {
-  const items = [item("1", "A", "todo", { plan: [{ text: "a", done: false }, { text: "b", done: true }] })];
-  let r = Model.toggleStep(items, "1", 2);
+  const doc = { items: [item("1", "A", "todo", { plan: [{ text: "a", done: false }, { text: "b", done: true }] })], focus: null };
+  let r = Model.toggleStep(doc, "1", 2);
   assert.equal(r.reply, "ok");
-  assert.deepEqual(r.items[0].plan, [{ text: "a", done: false }, { text: "b", done: false }]);
-  r = Model.toggleStep(items, "1", "1");
-  assert.equal(r.items[0].plan[0].done, true);
-  assert.equal(Model.toggleStep(items, "1", 3).reply, "bad step");
-  assert.equal(Model.toggleStep(items, "1", 0).reply, "bad step");
-  assert.equal(Model.toggleStep(items, "1", "x").reply, "bad step");
-  assert.equal(Model.toggleStep(items, "9", 1).reply, "unknown id");
-  assert.equal(items[0].plan[1].done, true, "input untouched");
+  assert.deepEqual(r.doc.items[0].plan, [{ text: "a", done: false }, { text: "b", done: false }]);
+  assert.deepEqual(r.action, { type: "toggleStep", id: "1", n: 2 });
+  r = Model.toggleStep(doc, "1", "1");
+  assert.equal(r.doc.items[0].plan[0].done, true);
+  assert.equal(r.action.n, 1, "the step number is a number");
+  assert.equal(Model.toggleStep(doc, "1", 3).reply, "bad step");
+  assert.equal(Model.toggleStep(doc, "1", 0).reply, "bad step");
+  assert.equal(Model.toggleStep(doc, "1", "x").reply, "bad step");
+  assert.equal(Model.toggleStep(doc, "9", 1).reply, "unknown id");
+  assert.equal(doc.items[0].plan[1].done, true, "input untouched");
 });
 
 test("removeItem drops the item and a focus link to it", () => {
   const items = [item("1", "A", "doing"), item("2", "B", "todo")];
-  let r = Model.removeItem({ items, focus: { text: "T", taskId: "1" } }, "1");
+  let r = Model.removeItem({ items, focus: { text: "T", taskId: "1" } }, 1);
   assert.equal(r.reply, "ok");
-  assert.deepEqual(r.items.map((i) => i.id), ["2"]);
-  assert.equal(r.focus.taskId, null);
+  assert.deepEqual(r.doc.items.map((i) => i.id), ["2"]);
+  assert.equal(r.doc.focus.taskId, null);
+  assert.deepEqual(r.action, { type: "remove", id: "1" });
   r = Model.removeItem({ items, focus: { text: "T", taskId: "1" } }, "2");
-  assert.equal(r.focus.taskId, "1");
+  assert.equal(r.doc.focus.taskId, "1");
   assert.equal(Model.removeItem({ items, focus: { text: "", taskId: null } }, "9").reply, "unknown id");
   assert.equal(Model.findItem(items, "2").name, "B");
   assert.equal(Model.findItem(items, "x"), null);
   assert.equal(Model.findItem(null, "x"), null);
+});
+
+test("reduce: one action vocabulary, one result shape, frozen inputs untouched", () => {
+  const items = Object.freeze([
+    Object.freeze(item("1", "A", "todo", { plan: Object.freeze([Object.freeze({ text: "s", done: false })]) })),
+    Object.freeze(item("2", "B", "done")),
+  ]);
+  const doc = Object.freeze({ items, focus: Object.freeze({ text: "T", taskId: null }) });
+  const accepted = [
+    { type: "add", name: " New ", description: "" },
+    { type: "setStatus", id: 1, status: "doing" },
+    { type: "focus", id: 1 },
+    { type: "focus", id: "clear" },
+    { type: "toggleStep", id: "1", n: "1" },
+    { type: "remove", id: 1 },
+  ];
+  for (const a of accepted) {
+    const r = Model.reduce(doc, a);
+    assert.deepEqual(Object.keys(r).sort(), ["action", "doc", "item", "ok", "reply"], a.type);
+    assert.equal(r.ok, true, a.type);
+    assert.equal(r.action.type, a.type);
+    assert.deepEqual(Object.keys(r.doc), ["items", "focus"]);
+  }
+  assert.equal(items[0].status, "todo");
+  assert.equal(items[0].plan[0].done, false);
+  assert.equal(items.length, 2);
+  assert.equal(Model.reduce(doc, { type: "add", name: "x" }).item.name, "x");
+  assert.equal(Model.reduce(doc, { type: "remove", id: 1 }).item, null);
+  const refused = Model.reduce(doc, { type: "focus", id: 2 });
+  assert.deepEqual(refused, { ok: false, doc: { items, focus: { text: "T", taskId: null } }, reply: "refused: done", action: null, item: null });
+  assert.equal(Model.reduce(doc, { type: "nonsense" }).reply, "unknown action");
+  assert.equal(Model.reduce(null, null).reply, "unknown action");
+  assert.deepEqual(Model.reduce({}, { type: "add", name: "x" }).doc.focus, { text: "", taskId: null }, "a bare doc has an empty focus");
+});
+
+test("ipcReply keeps upstream's replies: remove answers ok whatever the id (A-R2.1)", () => {
+  assert.equal(Model.ipcReply({ type: "remove", id: "zz" }, "unknown id"), "ok");
+  assert.equal(Model.ipcReply({ type: "remove", id: "zz" }, "unavailable: todocli not found"), "unavailable: todocli not found");
+  assert.equal(Model.ipcReply({ type: "setStatus", id: "zz", status: "done" }, "unknown id"), "unknown id");
+  assert.equal(Model.ipcReply({ type: "add", name: "x" }, "x"), "x");
+});
+
+test("tickDone remembers an open row's pre-tick status and warns when the pomodoro sits on it (UI-14, UX §6.4)", () => {
+  const items = [item("1", "A", "doing"), item("2", "B", "todo"), item("3", "C", "done")];
+  const idle = { phase: "idle", running: false, remaining: 0, taskId: "", label: "", attached: false };
+  const onOne = { phase: "work", running: true, remaining: 9, taskId: "1", label: "A", attached: true };
+  assert.deepEqual(Model.tickDone({ items, sessionDone: { 7: "todo" }, pomodoro: idle }, { type: "setStatus", id: 2, status: "done" }), { sessionDone: { 7: "todo", 2: "todo" }, message: "" });
+  assert.deepEqual(Model.tickDone({ items, sessionDone: {}, pomodoro: onOne }, { type: "setStatus", id: "1", status: "done" }), { sessionDone: { 1: "doing" }, message: Model.MSG_DONE_ATTACHED });
+  assert.equal(Model.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "3", status: "done" }), null, "already done");
+  assert.equal(Model.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "9", status: "done" }), null, "unknown id");
+  assert.equal(Model.tickDone({ items, sessionDone: {}, pomodoro: idle }, { type: "setStatus", id: "1", status: "todo" }), null, "not a tick");
+  assert.equal(Model.tickDone({ items }, { type: "remove", id: "1" }), null);
+  assert.equal(Model.tickDone({ items }, null), null);
 });
 
 // ------------------------------------------------------------- ordering

@@ -126,7 +126,7 @@ Item {
           fontFamily: line.family
           fontSize: Style.font.caption
           enabled: line.panel !== null && !line.panel.cliError
-          onClicked: if (line.panel) line.panel.setFocus("clear")
+          onClicked: if (line.panel) line.panel.perform({ type: "focus", id: "clear" })
         }
       }
     }

@@ -92,12 +92,22 @@ QtObject {
     }
   }
 
-  // ---- writes (FIFO, one at a time, one read after each)
-  function enqueue(action, revert, done) {
-    queue.push({ action: action, revert: revert, done: done })
+  // ---- mutations (optimistic; a reply means accepted, not committed).
+  //      The action is applied to the local doc at once and queued for the
+  //      write FIFO with the doc to restore should the write fail.
+  function perform(action, done) {
+    if (error) return Model.unavailable(error)
+    var r = Model.reduce({ items: items, focus: focus }, action)
+    if (!r.ok) return r.reply
+    var prev = { items: items, focus: focus }
+    items = r.doc.items
+    focus = r.doc.focus
+    queue.push({ action: r.action, revert: function() { items = prev.items; focus = prev.focus }, done: done })
     pump()
+    return r.reply
   }
 
+  // ---- writes (FIFO, one at a time, one read after each)
   function pump() {
     if (pending || writeProc.running || queue.length === 0) return
     pending = queue.shift()
@@ -110,11 +120,12 @@ QtObject {
     var err = Model.classifyExit(code, writeErr.text, spawnFailed)
     var job = pending
     pending = null
-    if (job) {
-      if (err && typeof job.revert === "function") job.revert()
-      if (err) failed(err)
-      if (typeof job.done === "function") job.done(err)
+    if (!job) return
+    if (err) {
+      job.revert()
+      failed(err)
     }
+    if (job.done) job.done(err)
   }
 
   // One read after each write, then the next queued write; runs once the
@@ -122,71 +133,6 @@ QtObject {
   function afterWrite() {
     read()
     pump()
-  }
-
-  // ---- mutations (optimistic; replies mean accepted, not committed)
-  function add(name, description) {
-    if (error) return Model.unavailable(error)
-    var r = Model.addItem(items, name, description)
-    if (r.reply === "empty") return "empty"
-    var tempId = r.item.id
-    items = r.items
-    enqueue({ type: "add", name: r.reply, description: Model.squish(description) }, function() {
-      items = Model.removeItem({ items: items, focus: focus }, tempId).items
-    }, null)
-    return r.reply
-  }
-
-  function setStatus(id, status) {
-    if (error) return Model.unavailable(error)
-    var r = Model.setStatus({ items: items, focus: focus }, id, status)
-    if (r.reply !== "ok") return r.reply
-    var prevItems = items
-    var prevFocus = focus
-    items = r.items
-    focus = r.focus
-    enqueue({ type: "setStatus", id: String(id), status: status }, function() { items = prevItems; focus = prevFocus }, null)
-    return "ok"
-  }
-
-  function setFocus(idOrClear, done) {
-    if (error) {
-      if (typeof done === "function") done(error)
-      return Model.unavailable(error)
-    }
-    var r = Model.setFocus({ items: items, focus: focus }, idOrClear)
-    if (r.reply !== "ok") {
-      if (typeof done === "function") done(r.reply)
-      return r.reply
-    }
-    var prevItems = items
-    var prevFocus = focus
-    items = r.items
-    focus = r.focus
-    enqueue({ type: "focus", id: String(idOrClear) }, function() { items = prevItems; focus = prevFocus }, done)
-    return "ok"
-  }
-
-  function toggleStep(id, n) {
-    if (error) return Model.unavailable(error)
-    var r = Model.toggleStep(items, id, n)
-    if (r.reply !== "ok") return r.reply
-    var prevItems = items
-    items = r.items
-    enqueue({ type: "toggleStep", id: String(id), n: Number(n) }, function() { items = prevItems }, null)
-    return "ok"
-  }
-
-  function remove(id) {
-    if (error) return Model.unavailable(error)
-    var r = Model.removeItem({ items: items, focus: focus }, id)
-    if (r.reply !== "ok") return r.reply
-    var prevItems = items
-    var prevFocus = focus
-    items = r.items
-    focus = r.focus
-    enqueue({ type: "remove", id: String(id) }, function() { items = prevItems; focus = prevFocus }, null)
-    return "ok"
   }
 
   // `sync all`, single-flight outside the write FIFO; a second call while
