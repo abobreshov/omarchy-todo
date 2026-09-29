@@ -148,15 +148,21 @@ Panel {
     for (var i = 0; i < r.actions.length; i++) apply(r.actions[i])
   }
 
+  // A key-driven mutation refused from a known error state shows its
+  // `unavailable: <reason>` reply as the transient.
+  function noteReply(reply) {
+    if (typeof reply === "string" && reply.indexOf("unavailable") === 0) showMessage(reply)
+  }
+
   function apply(action) {
     switch (action.type) {
-      case "add": addItem(action.name, action.description); break
-      case "setStatus": setStatus(action.id, action.status); break
-      case "focus": setFocus(action.id); break
-      case "startPomodoro": startPomodoro(action.id); break
+      case "add": noteReply(addItem(action.name, action.description)); break
+      case "setStatus": noteReply(setStatus(action.id, action.status)); break
+      case "focus": noteReply(setFocus(action.id)); break
+      case "startPomodoro": noteReply(startPomodoro(action.id)); break
       case "pausePomodoro": pomo.pause(); break
-      case "toggleStep": toggleStep(action.id, action.n); break
-      case "remove": deleteItem(action.id); break
+      case "toggleStep": noteReply(toggleStep(action.id, action.n)); break
+      case "remove": noteReply(deleteItem(action.id)); break
       case "refresh": refresh(); break
       case "syncNow": syncNow(); break
       case "message": showMessage(action.text); break

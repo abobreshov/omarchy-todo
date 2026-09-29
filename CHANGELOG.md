@@ -47,7 +47,8 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   `open/close/show/hide/toggle` keep their arities and replies.
 - Settings `backend`, `cliPath`, `pomodoroTarget`, `maxChars`.
 - `node --test` suite for `Model.js`, `Keys.js`, `Argv.js` (≥ 95 % lines),
-  `tools/qmllint.sh` and a fake `todocli`.
+  `tools/qmllint.sh` with a warning baseline, a fake `todocli` and
+  `tests/smoke.sh`, a headless IPC smoke test in a scratch Quickshell instance.
 
 ## [1.0.0] - 2026-09-25
 

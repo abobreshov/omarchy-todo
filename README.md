@@ -1,116 +1,208 @@
-# Checklist Todo
+# Checklist Todo (`abobreshov.todo`)
 
-**The todo list that stays out of your way.**
+**The todo list that stays out of your way — now with a focus, doing/done and
+an optional `todocli` backend.**
 
-A tiny, no-nonsense checklist for the [Omarchy](https://omarchy.org/) bar. Add an
-item, read it, tick it off. No accounts, no sync daemons, no configuration — just
-a list that lives in your bar and gets out of your way.
+A tiny checklist for the [Omarchy](https://omarchy.org/) bar. Add an item,
+read it, tick it done, pick the one you are working on and start a pomodoro
+for it. By default your data is a plain JSON file; with `backend = cli` every
+read and write goes through [`todocli`](https://github.com/abobreshov/productivity),
+so the same list shows up in Claude Code, Obsidian and Basecamp.
 
-![Checklist Todo panel](preview.png)
-
-![Checklist Todo demo](preview.gif)
-
-Use it as a general checklist or a lightweight todo list. The whole plugin is
-four small files, and your data is a plain JSON file you can read, back up, or
-edit by hand.
+Forked from https://github.com/tathagat11/omarchy-checklist-todo (MIT) by
+Tathagata Talukdar. Plugin id `abobreshov.todo`; the bar icon, the three
+views, the keys and the JSON-file pattern are upstream's.
 
 ## Features
 
-- **Add in a keystroke** — type a name and an optional description.
-- **One-line list** — just names, each with a checkbox beside it.
-- **Details on demand** — click an item to read its description, then go back.
-- **Tick to remove** — click the checkbox to delete an item for good.
-- **Keyboard-friendly** — `n` or `+` for a new item, `Enter` to save, `Esc` to
-  go back or close.
-- **Stays in sync** — every monitor's bar shows the same list.
-- **Zero dependencies** — no scripts, no services, no network.
+- **Add in a keystroke** — `n`, a name, an optional description, Enter.
+- **Focus, doing, done** — `f` sets the focus (the pill shows it), `s` marks
+  doing, `d` ticks done. A done row stays visible, struck through, until the
+  panel closes; `d` again reopens it.
+- **Explicit delete** — `x x` in the list, the delete button in the detail
+  view, or IPC `remove`. Ticking never deletes.
+- **Details on demand** — Enter on a row shows the description, the plan
+  (steps tick with Enter or Space) and the notes.
+- **Pomodoro hand-off** — `p` (or a middle click on the pill) focuses the task
+  and asks the `abobreshov.pomodoro` plugin to start on it; the focus line
+  shows the timer.
+- **Keyboard first** — `j`/`k` move, `?` shows the shortcut line, Tab jumps to
+  the neighbouring bar panel; every key has an IPC twin and `dump` reads the
+  panel's state.
+- **Two backends, one look** — `json` keeps a file in
+  `~/.local/state/abobreshov.todo/todos.json`; `cli` runs `todocli`. Views,
+  keys and copy are identical; cli mode adds a sync footer and `#id`s.
+- **Zero dependencies in json mode** — no scripts, no services, no network.
 
 ## Installation
 
-### From the plugin marketplace
-
-Browse the marketplace and install **Checklist Todo**, or add it directly:
-
 ```bash
-omarchy plugin add https://github.com/tathagat11/omarchy-checklist-todo --enable
+omarchy plugin add https://github.com/abobreshov/omarchy-todo --enable
 ```
 
-### From a local clone
+The focus label needs width; the `right` section is usually crowded:
 
 ```bash
-mkdir -p ~/.config/omarchy/plugins/tathagat11.checklist-todo
-cp manifest.json BarWidget.qml Panel.qml Model.js preview.png \
-  ~/.config/omarchy/plugins/tathagat11.checklist-todo/
-omarchy-shell shell rescanPlugins
-omarchy plugin enable tathagat11.checklist-todo --section right
+omarchy bar move abobreshov.todo --section left
+```
+
+If you used the upstream Checklist Todo, the first json-mode start reads
+`~/.local/state/tathagat11.checklist-todo/todos.json` once (item ids kept) and
+saves a copy in the plugin's own path; the upstream file is never written. The
+same by hand:
+
+```bash
+mkdir -p ~/.local/state/abobreshov.todo
+cp ~/.local/state/tathagat11.checklist-todo/todos.json ~/.local/state/abobreshov.todo/
 ```
 
 ## Usage
 
-Click the checkbox icon in the bar to open the list.
+Click the checkbox icon in the bar (or `omarchy-shell abobreshov.todo toggle`).
 
-| Action | Mouse | Keyboard |
+| Key | List | Detail |
 | --- | --- | --- |
-| New item | Click `+` | `n` or `+` |
-| Open an item | Click its name | — |
-| Delete an item | Click its checkbox | — |
-| Go back | Click the back arrow | `Esc` |
-| Save | Click **Save** | `Enter` |
-| Close | Click outside | `Esc` |
+| `n` `N` `+` | New todo | — |
+| `j` `k` / Down Up | Move the cursor | Move over the plan steps |
+| Enter, Space, `l`, Right | Open the row (the focus line: its task, or compose pre-filled for a free-text focus) | Toggle the step |
+| `d` | Toggle done | Toggle done |
+| `s` | Toggle doing (on the focus task, doing → todo also clears the focus) | Same |
+| `f` | Set as focus (marks it doing); on the focus task: clear | Same |
+| `p` | Focus it and start its pomodoro; on the attached task: pause/resume | Same |
+| `x` `x` | Delete (armed for 3 s) | Delete and go back |
+| `r` | Reload (json: re-read the file; cli: `todocli board --json`) | Same |
+| `R` | Sync now (cli only) | Same |
+| `?` | Shortcut line | Same |
+| Esc | Close | Back to the list |
+| Tab / Shift+Tab | Neighbouring bar panel | Same |
 
-Like every bar widget, it can be moved and reordered:
+On a done row `s`, `f` and `p` are inert (`#12 is done · d reopens it`); the
+one exception is `p` on the task the running pomodoro is attached to, which
+pauses or resumes it. Mouse: the row checkbox toggles done, the title opens
+the detail, the ghost `(o)`/`(t)` buttons on hover set the focus / start the
+pomodoro, the footer's failure text runs a sync.
+
+The pill shows, in this order: a backend error, the doing task (the focus task
+if it is doing, else the lowest id), the focus text, the open count, nothing.
+Vertical bars show the icon only.
+
+## Settings
 
 ```bash
-omarchy bar move tathagat11.checklist-todo --section left
-omarchy plugin disable tathagat11.checklist-todo
+omarchy bar set abobreshov.todo <key> <value>     # numbers need --json
 ```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `backend` | `json` | `cli` routes every read (`todocli --source omarchy --json board`) and write through `todocli`. Any other value means `json`. |
+| `cliPath` | `todocli` | Command name or absolute path, run as a plain argv `Process` (no shell). The default resolves on the shell's own PATH, which on Omarchy contains `~/.cargo/bin`; set an absolute path such as `/home/you/.cargo/bin/todocli` where it does not (QML does not expand `~`). Shown in `dump.cliPath`. |
+| `pomodoroTarget` | `abobreshov.pomodoro` | IPC target used by `p` and the middle click. |
+| `maxChars` | `24` | Pill label length on horizontal bars; `0` shows the icon only. |
+
+### Switching from json to cli
+
+1. Install `todocli` and import the panel's list once (additive and
+   idempotent; a second import adds nothing):
+
+   ```bash
+   todocli import --omarchy ~/.local/state/abobreshov.todo/todos.json
+   ```
+
+2. `omarchy bar set abobreshov.todo backend cli`
+
+The switch is one-way in practice: after `cli`, a return to `json` shows the
+plugin's file as it was last written, and edits or deletions made there later
+never reach the `todocli` database (an id missing from the file cannot be told
+from an old copy). `todocli daemon --preflight` flags a json store newer than
+the database.
+
+### cli mode
+
+- Reads happen on load, on todocli's change signal (the stamp
+  `~/.local/state/todocli/changed` replaced after every committed write, and
+  the push `omarchy-shell -q abobreshov.todo refresh`), on `r`, on panel open,
+  every 30 s in an error state and every sync interval while the panel is
+  open. The panel never watches the SQLite file.
+- Writes are optimistic and reverted with `Not saved — <reason>.` on failure;
+  they are never retried automatically.
+- Errors: `todocli not found` (E4, fix `cliPath` or go back to `backend
+  json`), `Database busy or locked` (E5, the last list stays read-only),
+  `todocli error` (E7, the first stderr lines), `Can't read todocli output`
+  (E8, version mismatch). The panel never falls back to the JSON file on its
+  own.
+- The footer shows the sync state from `todocli board --json`'s `sync`
+  block: `todocli · synced 2m ago`, `Basecamp sync failed 12m ago · R retry`,
+  `Sync daemon idle since 2h ago · R sync now`.
 
 ## IPC
 
-The plugin exposes an IPC target for scripting:
-
 ```bash
-# Add an item
-omarchy-shell tathagat11.checklist-todo add "Buy milk" "Semi-skimmed"
+# Upstream surface, unchanged
+omarchy-shell abobreshov.todo add "Buy milk" "Semi-skimmed"   # -> "Buy milk" | "empty" | "unavailable: …"
+omarchy-shell abobreshov.todo remove <id>                     # -> "ok"
+omarchy-shell abobreshov.todo status                          # -> "3 todos" (open items)
+omarchy-shell abobreshov.todo open|close|show|hide|toggle
 
-# How many items are open
-omarchy-shell tathagat11.checklist-todo status
-
-# Remove an item by id
-omarchy-shell tathagat11.checklist-todo remove <id>
+# Fork additions
+omarchy-shell abobreshov.todo setStatus <id> todo|doing|done  # -> ok | unknown id | bad status
+omarchy-shell abobreshov.todo focus <id>|clear                # -> ok | unknown id | refused: done
+omarchy-shell abobreshov.todo startPomodoro <id>|focus        # -> ok | unknown id | no focus
+omarchy-shell abobreshov.todo toggleStep <id> <n>             # -> ok | unknown id | bad step
+omarchy-shell abobreshov.todo openTask <id>                   # -> ok | "Task <id> not found."
+omarchy-shell abobreshov.todo refresh                         # -> ok (re-reads on every monitor)
+omarchy-shell abobreshov.todo syncNow                         # -> ok | "Sync needs backend = cli."
+omarchy-shell abobreshov.todo dump                            # -> one JSON line
 ```
+
+In cli mode a mutator's reply means *accepted*, not committed: `todocli` runs
+asynchronously and the store reflects the change within a couple of seconds.
+From a known error state every mutator replies `unavailable: <reason>`.
+`dump` returns `{version, backend, cliPath, view, stale, error, pill, focus,
+open, done, banner, footer, message}`.
 
 ## Data
 
-Your list is stored as plain JSON at:
-
-```
-~/.local/state/tathagat11.checklist-todo/todos.json
-```
-
-Nothing leaves your machine. Delete the file to start over.
+- json mode: `~/.local/state/abobreshov.todo/todos.json` (version 2:
+  `focus`, `todos[{id, name, description, status, plan, notes}]`; version 1
+  files load as all-todo). The directory is created `0700`. An unparsable
+  non-empty file shows a banner and blocks saves instead of being overwritten.
+- cli mode: the `todocli` database; the plugin writes nothing of its own.
 
 ## Uninstall
 
 ```bash
-omarchy plugin disable tathagat11.checklist-todo
-omarchy plugin remove tathagat11.checklist-todo
-```
-
-Optionally delete your data:
-
-```bash
-rm -rf ~/.local/state/tathagat11.checklist-todo
+omarchy plugin disable abobreshov.todo
+omarchy plugin remove abobreshov.todo
+rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 ```
 
 ## Development
 
-Validate the manifest and lint the QML:
+All logic lives in `Model.js`, `Keys.js` and `Argv.js` (`.pragma library`);
+the QML files bind and forward. Every `Text` that shows user text sets
+`textFormat: Text.PlainText`; the pill and tooltip text (kit-owned) goes
+through `Model.pillLabel`/`Model.tooltip`, which turn `<`/`>` into `‹`/`›`.
+Every external command is an argv list for a `Process`, never a shell string.
 
 ```bash
+# Unit tests with the 95 % line-coverage gate (Node ≥ 22)
+node --test --experimental-test-coverage --test-coverage-lines=95 \
+  --test-coverage-include="**/*.js" tests/
+
+# qmllint with the Omarchy shell as the `qs` import root, gated on a baseline
+tools/qmllint.sh            # tools/qmllint.sh --update rewrites the baseline
+
+# Manifest and file checks
 omarchy plugin validate .
-qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml
+
+# Headless smoke test of the IPC surface in both modes (needs qs and a Wayland session)
+tests/smoke.sh
 ```
+
+The lint recipe by hand: `/usr/lib/qt6/bin/qmllint -I <dir-with-a-qs-symlink>
+*.qml`, where `<dir>/qs -> /usr/share/omarchy/shell`. The baseline holds the
+kit's inherent `missing-property` warnings on the `Style` singleton's
+sub-objects and the `signal-handler-parameters` warning on `Process.onExited`.
 
 Edits under `~/.config/omarchy/plugins/` hot-reload on save.
 
@@ -120,4 +212,5 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — Copyright (c) 2026 tathagat11; modifications Copyright (c)
+2026 Alexander Bobreshov.
