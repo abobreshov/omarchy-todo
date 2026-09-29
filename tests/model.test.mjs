@@ -305,6 +305,20 @@ test("reduce: one action vocabulary, one result shape, frozen inputs untouched",
   assert.deepEqual(Model.reduce({}, { type: "add", name: "x" }).doc.focus, { text: "", taskId: null }, "a bare doc has an empty focus");
 });
 
+test("rememberId and withRealId map an optimistic add's temporary id to the id todocli replied with (A34)", () => {
+  const map = Model.rememberId({}, "tabc", '{"id":42,"title":"x"}\n');
+  assert.deepEqual(map, { tabc: "42" });
+  assert.deepEqual(Model.rememberId(map, "tdef", "not json"), map, "no id, no mapping");
+  assert.deepEqual(Model.rememberId(map, "tdef", "[]"), map);
+  assert.deepEqual(Model.rememberId(map, "tdef", '{"title":"x"}'), map);
+  assert.deepEqual(Model.rememberId(null, "t1", '{"id":"7"}'), { t1: "7" });
+  assert.deepEqual(Model.withRealId({ type: "setStatus", id: "tabc", status: "done" }, map), { type: "setStatus", id: "42", status: "done" });
+  const untouched = { type: "remove", id: "7" };
+  assert.equal(Model.withRealId(untouched, map), untouched);
+  assert.equal(Model.withRealId({ type: "syncNow" }, map).type, "syncNow");
+  assert.equal(Model.withRealId(untouched, null), untouched);
+});
+
 test("ipcReply keeps upstream's replies: remove answers ok whatever the id (A-R2.1)", () => {
   assert.equal(Model.ipcReply({ type: "remove", id: "zz" }, "unknown id"), "ok");
   assert.equal(Model.ipcReply({ type: "remove", id: "zz" }, "unavailable: todocli not found"), "unavailable: todocli not found");

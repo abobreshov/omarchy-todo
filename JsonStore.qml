@@ -12,23 +12,8 @@ import "Argv.js" as Argv
 // saves a copy, never writing it (AC-2.6); an unparsable non-empty file
 // shows a banner and blocks saves instead of being overwritten (E14).
 // Nothing here spawns a process other than `install`, and never todocli.
-QtObject {
+TodoStore {
   id: store
-
-  // ---- the store interface (PLAN §6.4); views bind to these only
-  property var items: []
-  property var focus: ({ text: "", taskId: null })
-  property bool loaded: false
-  property var error: null
-  property bool stale: false
-  property var sync: []
-  property bool syncing: false
-  property string banner: ""
-  property bool opened: false
-
-  signal documentLoaded(var doc)
-  signal failed(var error)
-  signal syncFinished(var result)
 
   readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/abobreshov.todo/"
   readonly property string savePath: stateDir + "todos.json"
@@ -95,7 +80,7 @@ QtObject {
     stateDirWatch.reload()
   }
 
-  function load() { ensureDirProc.running = true }
+  function load() { ensureDirProc.run(Argv.stateDir(stateDir)) }
   function refresh() { reloadFromDisk(); return "ok" }
 
   // ---- mutations (synchronous; replies are final, as upstream). `done`
@@ -110,12 +95,18 @@ QtObject {
     return r.reply
   }
 
-  function syncNow() { return Model.MSG_SYNC_NEEDS_CLI }
+  // `R` / IPC syncNow in json mode: the transient of UX §4.5, through the
+  // same signal the cli store answers with.
+  function syncNow() {
+    syncFinished({ ok: false, message: Model.MSG_SYNC_NEEDS_CLI })
+    return Model.MSG_SYNC_NEEDS_CLI
+  }
 
   // ---- persistence objects
-  property Process ensureDirProc: Process {
-    command: Argv.stateDir(store.stateDir)
-    onExited: Qt.callLater(store.reloadFromDisk)
+  property ArgvProcess ensureDirProc: ArgvProcess {
+    // The file is read whether or not `install` could run; a save into a
+    // directory that does not exist fails silently (printErrors: false).
+    onStopped: store.reloadFromDisk()
   }
 
   property FileView saveFile: FileView {
@@ -145,7 +136,7 @@ QtObject {
   // rewrite, which is what keeps both monitors' panels in step.
   property FileView stateDirWatch: FileView {
     path: store.stateDir
-    watchChanges: true
+    watchChanges: store.active
     printErrors: false
     onFileChanged: store.dirReloadTimer.restart()
   }

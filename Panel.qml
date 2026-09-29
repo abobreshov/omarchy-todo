@@ -41,7 +41,8 @@ Panel {
   readonly property string cliPath: cfg.cliPath
   readonly property string pomodoroTarget: cfg.pomodoroTarget
   readonly property int maxChars: cfg.maxChars
-  readonly property var store: backend === "cli" ? cliStore : jsonStore
+  // The one place the backend is looked at: everything else binds to `store`.
+  readonly property TodoStore store: backend === "cli" ? cliStore : jsonStore
 
   // ---- state
   property var ui: KeyMap.initialUi()
@@ -73,13 +74,13 @@ Panel {
     backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
     sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
   })
-  readonly property var footerModel: backend === "cli" ? Model.footer(store.sync, clockNow, { syncing: store.syncing }) : null
-  readonly property var errorModel: backend === "cli" ? Model.errorView(store.error, { cliPath: cliPath, moduleName: moduleName, lastGoodAt: cliStore.lastGoodAt }) : null
-  readonly property string banner: backend === "cli" ? (errorModel && errorModel.banner ? errorModel.banner : "") : store.banner
-  readonly property bool cliError: backend === "cli" && store.error !== null
-  // E3: the empty-state copy waits for the first read; cli mode shows
-  // `Loading…` instead, and only once the first read has taken 300 ms.
-  readonly property bool loading: backend === "cli" && !store.loaded && store.error === null
+  readonly property var footerModel: store.hasSync ? Model.footer(store.sync, clockNow, { syncing: store.syncing }) : null
+  readonly property var errorModel: Model.errorView(store.error, { cliPath: cliPath, moduleName: moduleName })
+  readonly property string banner: store.banner
+  readonly property bool errored: store.error !== null
+  // E3: the empty-state copy waits for the first read; `Loading…` shows
+  // instead, and only once the first read has taken 300 ms.
+  readonly property bool loading: !store.loaded && store.error === null
   property bool loadingShown: false
   readonly property string emptyCopy: loading ? (loadingShown ? "Loading\u2026" : "") : (store.loaded ? (Model.emptyCopy(items) || "") : "")
   onLoadingChanged: if (!loading) loadingShown = false
@@ -90,22 +91,22 @@ Panel {
   // Component.onCompleted.
   property bool ready: false
 
-  // The error view replaces the list body for E4/E7/E8; E5 is a banner.
+  // The error view replaces the list body for E4/E7/E8; E5 is a banner
+  // above the list, so it leaves the error view like no error does.
   onStoreErrorChanged: {
     if (!ready) return
-    if (backend === "cli" && storeError && storeError.kind !== "busy") dispatch({ type: "showError" })
-    else if (!storeError) dispatch({ type: "clearError" })
+    if (storeError && storeError.kind !== "busy") dispatch({ type: "showError" })
+    else dispatch({ type: "clearError" })
   }
 
   // Deferred so every setting derived from the new `settings` object (the
   // cli path in particular) has settled before the other store loads.
-  onBackendChanged: if (ready) Qt.callLater(root.applyBackend)
+  onStoreChanged: if (ready) Qt.callLater(root.applyBackend)
 
   function applyBackend() {
     sessionDone = ({})
     message = ""
     dispatch({ type: "clearError" })
-    cliStore.active = backend === "cli"
     store.load()
   }
 
@@ -124,7 +125,6 @@ Panel {
 
   Component.onCompleted: {
     ready = true
-    cliStore.active = backend === "cli"
     store.load()
   }
 
@@ -256,11 +256,7 @@ Panel {
     return "ok"
   }
 
-  function syncNow() {
-    var reply = store.syncNow()
-    if (backend !== "cli") showMessage(reply)
-    return reply
-  }
+  function syncNow() { return store.syncNow() }
 
   // `p` / middle click / IPC startPomodoro (PLAN §6.9, A52): focus first, and
   // `startFor` only after the focus write exits 0; the attached task toggles
@@ -286,7 +282,7 @@ Panel {
       pomo.pause()
       return "ok"
     }
-    if (cliError) return Model.unavailable(store.error)
+    if (errored) return Model.unavailable(store.error)
     var task = it
     var reply = store.perform({ type: "focus", id: task.id }, function(err) {
       if (err) return
@@ -308,11 +304,15 @@ Panel {
     }))
   }
 
-  // ---- stores and links
-  JsonStore { id: jsonStore }
+  // ---- stores and links: the inactive store spawns and watches nothing.
+  JsonStore {
+    id: jsonStore
+    active: root.store === jsonStore
+  }
 
   CliStore {
     id: cliStore
+    active: root.store === cliStore
     cliPath: root.cliPath
     opened: root.opened
   }
@@ -445,7 +445,7 @@ Panel {
                 tooltipText: "New todo (n)"
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
-                enabled: !root.cliError
+                enabled: !root.errored
                 onClicked: root.beginCompose()
               }
             }
@@ -457,7 +457,7 @@ Panel {
               spacing: Style.spacing.controlGap
 
               Text {
-                text: root.backend === "cli" ? Model.G.lock : Model.G.alert
+                text: root.errorModel ? root.errorModel.glyph : Model.G.alert
                 color: Color.urgent
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.subtitle
@@ -501,7 +501,7 @@ Panel {
               width: parent.width
               spacing: 0
               // The last good list stays readable at 0.6 while the DB is busy.
-              opacity: root.banner !== "" && root.backend === "cli" ? 0.6 : 1
+              opacity: root.errored ? 0.6 : 1
 
               Repeater {
                 model: root.listItems
@@ -649,7 +649,7 @@ Panel {
 
           // ================================================ FOOTER / MESSAGE
           StatusFooter {
-            visible: root.ui.view !== "compose" && ((root.backend === "cli" && root.ui.view !== "error") || root.message !== "")
+            visible: root.ui.view !== "compose" && ((root.footerModel !== null && root.ui.view !== "error") || root.message !== "")
             width: parent.width
             panel: root
           }

@@ -20,7 +20,7 @@ Column {
   readonly property var tips: Model.actionTooltips(item, {
     focus: panel ? panel.focusModel : null, pomodoro: panel ? panel.pomodoro : null, armed: armed
   })
-  readonly property bool disabled: panel !== null && panel.cliError
+  readonly property bool disabled: panel !== null && panel.errored
   readonly property string statusText: hasItem ? Model.statusLine(item, { backend: panel.backend, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
 
   spacing: Style.spacing.md

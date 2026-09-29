@@ -16,40 +16,39 @@ function toList(value) {
 
 // [<cliPath>, "--source", "omarchy", "--json", <args…>, "--", <free text…>]
 // Global flags come first, so `--json` can never land in a title; `--` is
-// emitted only when free text follows it. `envPrefix` runs the binary
-// behind `/usr/bin/env`: Quickshell 0.3.1 emits no `exited` for a binary it
-// cannot spawn, while env exits 127 for one it cannot find (_verified L77).
-function todocli(cliPath, args, freeText, opts) {
+// emitted only when free text follows it. The binary is argv[0] itself, no
+// wrapper: a path is never misread, and ArgvProcess reports a binary it
+// cannot spawn (E4).
+function todocli(cliPath, args, freeText) {
   var path = cliPath === undefined || cliPath === null || String(cliPath) === "" ? DEFAULT_CLI : String(cliPath)
   var argv = [path, "--source", "omarchy", "--json"].concat(toList(args))
   var free = toList(freeText)
   if (free.length > 0) argv = argv.concat(["--"]).concat(free)
-  if (opts && opts.envPrefix) argv.unshift("/usr/bin/env")
   return argv
 }
 
-// The A34 command table, keyed by the store action.
-function forAction(cliPath, action, opts) {
+// The A34 command table, keyed by the Model.js action.
+function forAction(cliPath, action) {
   if (!action || typeof action !== "object") return null
   switch (action.type) {
-    case "read": return todocli(cliPath, ["board"], [], opts)
+    case "read": return todocli(cliPath, ["board"], [])
     case "add": {
       var args = ["add"]
       if (action.description !== undefined && action.description !== null && String(action.description) !== "") args.push("--description=" + String(action.description))
-      return todocli(cliPath, args, [String(action.name)], opts)
+      return todocli(cliPath, args, [String(action.name)])
     }
     case "setStatus": {
       var verb = action.status === "done" ? "done" : (action.status === "doing" ? "start" : (action.status === "todo" ? "reopen" : null))
       if (!verb) return null
-      return todocli(cliPath, [verb, String(action.id)], [], opts)
+      return todocli(cliPath, [verb, String(action.id)], [])
     }
     case "focus":
       return String(action.id) === "clear"
-        ? todocli(cliPath, ["focus", "--clear"], [], opts)
-        : todocli(cliPath, ["focus", "--task", String(action.id)], [], opts)
-    case "toggleStep": return todocli(cliPath, ["step", String(action.id), String(action.n)], [], opts)
-    case "remove": return todocli(cliPath, ["rm", String(action.id)], [], opts)
-    case "syncNow": return todocli(cliPath, ["sync", "all"], [], opts)
+        ? todocli(cliPath, ["focus", "--clear"], [])
+        : todocli(cliPath, ["focus", "--task", String(action.id)], [])
+    case "toggleStep": return todocli(cliPath, ["step", String(action.id), String(action.n)], [])
+    case "remove": return todocli(cliPath, ["rm", String(action.id)], [])
+    case "syncNow": return todocli(cliPath, ["sync", "all"], [])
     default: return null
   }
 }

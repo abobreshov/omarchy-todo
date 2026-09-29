@@ -289,9 +289,36 @@ function toCli(items, focus) {
   }
 }
 
-// Exit mapping of UX §7 / PLAN A34. Quickshell 0.3.1 emits no `exited` for a
-// binary that cannot be spawned (S2 probe), so the cli store runs todocli
-// behind `/usr/bin/env`, whose exit 127 lands here as `missing`.
+// The reply of a write is the affected task as one JSON object (§3.6): an
+// optimistic add's temporary id maps to its `id`, so a key pressed on the
+// new row before the re-read still names the right task (A34).
+function rememberId(idMap, tempId, out) {
+  var map = idMap || {}
+  var data
+  try {
+    data = JSON.parse(String(out))
+  } catch (e) {
+    return map
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.id === undefined || data.id === null) return map
+  var next = {}
+  for (var k in map) next[k] = map[k]
+  next[String(tempId)] = String(data.id)
+  return next
+}
+
+function withRealId(action, idMap) {
+  var map = idMap || {}
+  if (!action || action.id === undefined || map[action.id] === undefined) return action
+  var out = {}
+  for (var k in action) out[k] = action[k]
+  out.id = map[action.id]
+  return out
+}
+
+// Exit mapping of UX §7 / PLAN A34. A binary that cannot be spawned reaches
+// here as `spawnFailed` (ArgvProcess); a wrapper script that cannot find the
+// real binary exits 127, which reads the same.
 function classifyExit(code, stderr, spawnFailed) {
   if (spawnFailed || code === 127) return { kind: "missing", message: "todocli not found" }
   if (code === 0) return null

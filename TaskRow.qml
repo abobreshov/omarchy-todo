@@ -19,7 +19,7 @@ Item {
   readonly property bool isDoing: modelData.status === "doing"
   readonly property bool isFocus: panel !== null && panel.focusModel.taskId === modelData.id
   readonly property bool attached: panel !== null && panel.pomodoro.phase !== "idle" && panel.pomodoro.taskId === modelData.id
-  readonly property bool disabled: panel !== null && panel.cliError
+  readonly property bool disabled: panel !== null && panel.errored
   readonly property string progress: Model.planProgress(modelData)
   readonly property color fg: panel ? panel.contentForeground : Color.foreground
   readonly property color dim: panel ? panel.dimForeground : Qt.darker(Color.foreground, 1.5)

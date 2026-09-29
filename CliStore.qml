@@ -5,44 +5,33 @@ import "Model.js" as Model
 import "Argv.js" as Argv
 
 // The cli backend (PLAN §6.4, A34, A34b): every call is a plain argv
-// `Process` built by Argv.js, `[<cliPath>, "--source", "omarchy", "--json",
-// <cmd>, …, "--", <free text>]`, run behind `/usr/bin/env` so a missing
-// binary exits 127 (Quickshell 0.3.1 emits no `exited` for a spawn failure).
-// One read Process; writes go through a FIFO, one at a time, with one read
-// after each; `sync all` runs single-flight outside that FIFO. Writes are
-// optimistic and reverted on failure, never retried. Reads happen on load,
-// on the change signal (a directory watch on todocli's state dir plus the
-// `refresh()` push), on `r`, on panel open, every 30 s in an error state and
-// every smallest enabled intervalSec while the panel is open. In an error
-// state the last list stays (`stale`) and mutators reply `unavailable`.
-// Inactive (backend json) it spawns nothing and watches nothing.
-QtObject {
+// ArgvProcess built by Argv.js, `[<cliPath>, "--source", "omarchy",
+// "--json", <cmd>, …, "--", <free text>]`; a binary that cannot be spawned
+// reads as E4 (`missing`). One read Process; writes go through a FIFO, one
+// at a time, with one read after each; `sync all` runs single-flight
+// outside that FIFO. Writes are optimistic and reverted on failure, never
+// retried. Reads happen on load, on the change signal (a directory watch on
+// todocli's state dir plus the `refresh()` push), on `r`, on panel open,
+// every 30 s in an error state and every smallest enabled intervalSec while
+// the panel is open. In an error state the last list stays (`stale`) and
+// mutators reply `unavailable`. Inactive (backend json) it spawns nothing
+// and watches nothing.
+TodoStore {
   id: store
 
-  // ---- the store interface (PLAN §6.4)
-  property var items: []
-  property var focus: ({ text: "", taskId: null })
-  property bool loaded: false
-  property var error: null
-  property bool stale: false
-  property var sync: []
-  property bool syncing: false
-  property string banner: ""
-  property bool opened: false
+  hasSync: true
+  // E5 on a read: the banner above the last good list (UX §7).
+  banner: error && error.kind === "busy" ? Model.errorView(error, { lastGoodAt: lastGoodAt }).banner : ""
 
-  signal documentLoaded(var doc)
-  signal failed(var error)
-  signal syncFinished(var result)
-
-  property bool active: false
   property string cliPath: "todocli"
   readonly property string stampDir: Quickshell.env("HOME") + "/.local/state/todocli/"
-  property bool hadList: false
   property bool readRequested: false
   property bool watchArmed: false
   property double lastGoodAt: 0
   property var queue: []
   property var pending: null
+  // Temporary ids of optimistic adds -> the id todocli replied with (A34).
+  property var idMap: ({})
 
   function load() { read() }
   function refresh() { read(); return "ok" }
@@ -51,31 +40,27 @@ QtObject {
   function read() {
     if (!active) return
     if (readProc.running) { readRequested = true; return }
-    readExited = false
-    readProc.command = Argv.forAction(cliPath, { type: "read" }, { envPrefix: true })
-    readProc.running = true
+    readProc.run(Argv.forAction(cliPath, { type: "read" }))
   }
 
-  function finishRead(code, spawnFailed) {
-    var err = Model.classifyExit(code, readErr.text, spawnFailed)
-    if (!err) {
-      var doc = Model.fromCli(readOut.text)
-      if (!doc.ok) err = doc.error
-      else {
-        items = doc.items
-        focus = doc.focus
-        sync = doc.sync
-        error = null
-        stale = false
-        hadList = true
-        loaded = true
-        lastGoodAt = Date.now()
-        documentLoaded(doc)
-      }
-    }
-    if (err) {
-      error = err
-      stale = hadList
+  function finishRead(code, spawnFailed, out, err) {
+    var e = Model.classifyExit(code, err, spawnFailed)
+    var doc = e ? null : Model.fromCli(out)
+    if (doc && !doc.ok) e = doc.error
+    if (e) {
+      error = e
+      stale = loaded
+    } else if (!pending && queue.length === 0) {
+      // A read that lands while writes are queued is superseded by the read
+      // after the last of them, so it never undoes an optimistic change.
+      items = doc.items
+      focus = doc.focus
+      sync = doc.sync
+      error = null
+      stale = false
+      loaded = true
+      lastGoodAt = Date.now()
+      documentLoaded(doc)
     }
     // The directory watch is armed only after the first read returns and
     // re-armed after every read while the path may still be missing.
@@ -83,13 +68,12 @@ QtObject {
     stampWatch.reload()
   }
 
-  // Runs once the read Process has fully stopped (never from inside its own
-  // exited handler): the read that was asked for meanwhile.
+  // The read asked for while one was running; runs once the read Process
+  // has fully stopped.
   function afterRead() {
-    if (readRequested) {
-      readRequested = false
-      read()
-    }
+    if (!readRequested) return
+    readRequested = false
+    read()
   }
 
   // ---- mutations (optimistic; a reply means accepted, not committed).
@@ -102,7 +86,7 @@ QtObject {
     var prev = { items: items, focus: focus }
     items = r.doc.items
     focus = r.doc.focus
-    queue.push({ action: r.action, revert: function() { items = prev.items; focus = prev.focus }, done: done })
+    queue.push({ action: r.action, tempId: r.item ? r.item.id : null, revert: function() { items = prev.items; focus = prev.focus }, done: done })
     pump()
     return r.reply
   }
@@ -111,21 +95,19 @@ QtObject {
   function pump() {
     if (pending || writeProc.running || queue.length === 0) return
     pending = queue.shift()
-    writeExited = false
-    writeProc.command = Argv.forAction(cliPath, pending.action, { envPrefix: true })
-    writeProc.running = true
+    writeProc.run(Argv.forAction(cliPath, Model.withRealId(pending.action, idMap)))
   }
 
-  function finishWrite(code, spawnFailed) {
-    var err = Model.classifyExit(code, writeErr.text, spawnFailed)
+  function finishWrite(code, spawnFailed, out, err) {
+    var e = Model.classifyExit(code, err, spawnFailed)
     var job = pending
     pending = null
     if (!job) return
-    if (err) {
+    if (e) {
       job.revert()
-      failed(err)
-    }
-    if (job.done) job.done(err)
+      failed(e)
+    } else if (job.tempId) idMap = Model.rememberId(idMap, job.tempId, out)
+    if (job.done) job.done(e)
   }
 
   // One read after each write, then the next queued write; runs once the
@@ -135,91 +117,44 @@ QtObject {
     pump()
   }
 
-  // `sync all`, single-flight outside the write FIFO; a second call while
-  // one runs is ignored (footer shows "Syncing…").
+  // ---- `sync all`, single-flight outside the write FIFO; a second call
+  //      while one runs is ignored (footer shows "Syncing…").
   function syncNow() {
     if (error) return Model.unavailable(error)
     if (syncProc.running) return "ok"
     syncing = true
-    syncExited = false
-    syncProc.command = Argv.forAction(cliPath, { type: "syncNow" }, { envPrefix: true })
-    syncProc.running = true
+    syncProc.run(Argv.forAction(cliPath, { type: "syncNow" }))
     return "ok"
   }
 
-  function finishSync(code, spawnFailed) {
+  function finishSync(code, spawnFailed, out, err) {
     syncing = false
-    var err = Model.classifyExit(code, syncErr.text, spawnFailed)
-    if (!err) {
+    var e = Model.classifyExit(code, err, spawnFailed)
+    if (!e) {
       Qt.callLater(store.read)
       syncFinished({ ok: true })
-    } else if (err.kind === "busy") {
-      syncFinished({ ok: false, message: Model.MSG_SYNC_RUNNING })
-    } else {
-      error = err
-      stale = hadList
-      syncFinished({ ok: false, error: err })
+    } else if (e.kind === "busy") syncFinished({ ok: false, message: Model.MSG_SYNC_RUNNING })
+    else {
+      error = e
+      stale = loaded
+      syncFinished({ ok: false, error: e })
     }
   }
 
-  // ---- processes. Quickshell 0.3.1 flips `running` back to false without
-  //      `started` or `exited` when a binary cannot be spawned; the env
-  //      prefix makes that exit 127 instead, and the `*Exited` flags keep
-  //      the FIFO moving should it ever happen anyway. Follow-up work is
-  //      deferred with Qt.callLater so no Process is restarted from inside
-  //      its own exited handler.
-  property bool readExited: true
-  property bool writeExited: true
-  property bool syncExited: true
-
-  property Process readProc: Process {
-    stdout: StdioCollector { id: readOut; waitForEnd: true }
-    stderr: StdioCollector { id: readErr; waitForEnd: true }
-    onExited: function(exitCode) {
-      store.readExited = true
-      store.finishRead(exitCode, false)
-    }
-    onRunningChanged: {
-      if (running) return
-      if (!store.readExited) {
-        store.readExited = true
-        store.finishRead(-1, true)
-      }
-      Qt.callLater(store.afterRead)
-    }
+  // ---- processes; follow-up work runs from `stopped`, never from inside
+  //      a Process's own exit.
+  property ArgvProcess readProc: ArgvProcess {
+    onFinished: function(code, spawnFailed, out, err) { store.finishRead(code, spawnFailed, out, err) }
+    onStopped: store.afterRead()
   }
 
-  property Process writeProc: Process {
-    stdout: StdioCollector { id: writeOut; waitForEnd: true }
-    stderr: StdioCollector { id: writeErr; waitForEnd: true }
-    onExited: function(exitCode) {
-      store.writeExited = true
-      store.finishWrite(exitCode, false)
-    }
-    onRunningChanged: {
-      if (running) return
-      if (!store.writeExited) {
-        store.writeExited = true
-        store.finishWrite(-1, true)
-      }
-      Qt.callLater(store.afterWrite)
-    }
+  property ArgvProcess writeProc: ArgvProcess {
+    onFinished: function(code, spawnFailed, out, err) { store.finishWrite(code, spawnFailed, out, err) }
+    onStopped: store.afterWrite()
   }
 
-  property Process syncProc: Process {
-    stdout: StdioCollector { id: syncOut; waitForEnd: true }
-    stderr: StdioCollector { id: syncErr; waitForEnd: true }
-    onExited: function(exitCode) {
-      store.syncExited = true
-      store.finishSync(exitCode, false)
-    }
-    onRunningChanged: {
-      if (running) return
-      if (!store.syncExited) {
-        store.syncExited = true
-        store.finishSync(-1, true)
-      }
-    }
+  property ArgvProcess syncProc: ArgvProcess {
+    onFinished: function(code, spawnFailed, out, err) { store.finishSync(code, spawnFailed, out, err) }
   }
 
   // ---- change signal: todocli replaces `<stampDir>/changed` after every
@@ -258,11 +193,9 @@ QtObject {
   onOpenedChanged: if (opened) read()
   // A new cliPath applies at once, not only at the next retry.
   onCliPathChanged: if (active) Qt.callLater(store.read)
-  onActiveChanged: {
-    if (active) read()
-    else {
-      queue = []
-      readRequested = false
-    }
+  onActiveChanged: if (!active) {
+    queue = []
+    readRequested = false
+    idMap = {}
   }
 }

@@ -111,7 +111,7 @@ Item {
           hoverColor: Color.accent
           fontFamily: line.family
           fontSize: Style.font.caption
-          enabled: line.panel !== null && !line.panel.cliError
+          enabled: line.panel !== null && !line.panel.errored
           onClicked: if (line.panel) line.panel.startPomodoro("focus")
         }
 
@@ -125,7 +125,7 @@ Item {
           hoverColor: Color.urgent
           fontFamily: line.family
           fontSize: Style.font.caption
-          enabled: line.panel !== null && !line.panel.cliError
+          enabled: line.panel !== null && !line.panel.errored
           onClicked: if (line.panel) line.panel.perform({ type: "focus", id: "clear" })
         }
       }

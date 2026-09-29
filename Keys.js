@@ -60,7 +60,7 @@ function keyAction(view, key, ctx) {
   var c = ctx || {}
   if (view === "compose") return null
   if (key === "r") return { type: "refresh" }
-  if (key === "R") return c.backend === "cli" ? { type: "syncNow" } : { type: "message", text: Model.MSG_SYNC_NEEDS_CLI }
+  if (key === "R") return { type: "syncNow" }
   if (view === "error") return null
   if (key === "?") return { type: "toggleHelp" }
   if (view === "list" && (key === "n" || key === "N" || key === "+")) return { type: "compose" }

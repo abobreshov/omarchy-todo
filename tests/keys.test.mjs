@@ -94,13 +94,14 @@ test("UI-9: +, n, a do nothing in the detail view; n/N/+ open compose in the lis
   assert.equal(Keys.keyAction("list", "d", ctxFor({ item: null })), null);
 });
 
-test("UI-10: r refreshes and R syncs in cli mode, transient in json mode; error view keeps r/R", () => {
+test("UI-10: r refreshes and R asks the store to sync whatever the backend; error view keeps r/R", () => {
   assert.deepEqual(Keys.keyAction("list", "r", ctxFor()), { type: "refresh" });
   assert.deepEqual(Keys.keyAction("error", "r", ctxFor()), { type: "refresh" });
   assert.deepEqual(Keys.keyAction("detail", "r", ctxFor()), { type: "refresh" });
   assert.deepEqual(Keys.keyAction("list", "R", ctxFor({ backend: "cli" })), { type: "syncNow" });
   assert.deepEqual(Keys.keyAction("error", "R", ctxFor({ backend: "cli" })), { type: "syncNow" });
-  assert.deepEqual(Keys.keyAction("list", "R", ctxFor({ backend: "json" })), { type: "message", text: "Sync needs backend = cli." });
+  // The json store answers syncNow with the "Sync needs backend = cli." transient itself.
+  assert.deepEqual(Keys.keyAction("list", "R", ctxFor({ backend: "json" })), { type: "syncNow" });
   assert.equal(Keys.keyAction("error", "d", ctxFor({ item: item("1", "x", "todo") })), null);
   assert.deepEqual(Keys.keyAction("list", "?", ctxFor()), { type: "toggleHelp" });
   assert.deepEqual(Keys.keyAction("detail", "?", ctxFor()), { type: "toggleHelp" });
