@@ -1,12 +1,10 @@
 .pragma library
+.import "Model.js" as Model
 
 // Argv builders. Every external command the panel runs is a plain argv list
 // for a Quickshell `Process` (never a shell string, never `bar.run()` or
 // `Util.execDetached`), so user text is always exactly one argument
 // (PLAN §6.4, A34, A43; UX §4.7 item 5).
-
-var DEFAULT_CLI = "todocli"
-var DEFAULT_POMODORO = "abobreshov.pomodoro"
 
 function toList(value) {
   if (value === undefined || value === null) return []
@@ -20,8 +18,7 @@ function toList(value) {
 // wrapper: a path is never misread, and ArgvProcess reports a binary it
 // cannot spawn (E4).
 function todocli(cliPath, args, freeText) {
-  var path = cliPath === undefined || cliPath === null || String(cliPath) === "" ? DEFAULT_CLI : String(cliPath)
-  var argv = [path, "--source", "omarchy", "--json"].concat(toList(args))
+  var argv = [Model.str(cliPath) || Model.DEFAULTS.cliPath, "--source", "omarchy", "--json"].concat(toList(args))
   var free = toList(freeText)
   if (free.length > 0) argv = argv.concat(["--"]).concat(free)
   return argv
@@ -57,8 +54,7 @@ function forAction(cliPath, action) {
 // before the arguments, so a title that starts with a dash stays one
 // argument (_verified L55).
 function pomodoro(target, fn, args) {
-  var t = target === undefined || target === null || String(target) === "" ? DEFAULT_POMODORO : String(target)
-  return ["omarchy-shell", t, String(fn)].concat(toList(args))
+  return ["omarchy-shell", Model.str(target) || Model.DEFAULTS.pomodoroTarget, String(fn)].concat(toList(args))
 }
 
 // The state directory is made 0700 whether or not it exists (A34; AC-2.10).

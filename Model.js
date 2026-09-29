@@ -39,6 +39,10 @@ var G = {
 
 var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+var MODULE = "abobreshov.todo"
+// The four settings and their defaults (PLAN §6.5, A18; DECISIONS A-D5).
+var DEFAULTS = { backend: "json", cliPath: "todocli", pomodoroTarget: "abobreshov.pomodoro", maxChars: 24 }
+
 var NO_FOCUS = "no focus"
 var MSG_SYNC_NEEDS_CLI = "Sync needs backend = cli."
 var MSG_SYNC_RUNNING = "Sync already running."
@@ -51,9 +55,15 @@ function makeId() {
   return "t" + Date.now().toString(36) + Math.random().toString(36).substring(2, 8)
 }
 
+function str(value) { return value === undefined || value === null ? "" : String(value) }
+
+function strOrNull(value) {
+  var s = str(value)
+  return s === "" ? null : s
+}
+
 function squish(value) {
-  if (value === undefined || value === null) return ""
-  return String(value).replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "")
+  return str(value).replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "")
 }
 
 // Kit-owned Text (pill, tooltip) is not under this plugin's textFormat rule,
@@ -63,15 +73,14 @@ function plainAngle(value) {
 }
 
 function firstLine(text) {
-  var s = text === undefined || text === null ? "" : String(text)
+  var s = str(text)
   var i = s.indexOf("\n")
   return (i === -1 ? s : s.slice(0, i)).replace(/^\s+|\s+$/g, "")
 }
 
 function lines(text, n) {
-  var s = text === undefined || text === null ? "" : String(text)
   var out = []
-  var parts = s.split("\n")
+  var parts = str(text).split("\n")
   for (var i = 0; i < parts.length && out.length < n; i++) {
     var l = parts[i].replace(/^\s+|\s+$/g, "")
     if (l !== "") out.push(l)
@@ -111,7 +120,7 @@ function normalizeNotes(notes) {
     if (!note || typeof note !== "object") continue
     var text = squish(note.text)
     if (text === "") continue
-    out.push({ at: note.at === undefined || note.at === null ? "" : String(note.at), text: text })
+    out.push({ at: str(note.at), text: text })
   }
   return out
 }
@@ -124,14 +133,14 @@ function normalize(item) {
   if (id === "") id = makeId()
   return {
     id: id,
-    uid: item.uid === undefined || item.uid === null || item.uid === "" ? null : String(item.uid),
+    uid: strOrNull(item.uid),
     name: name,
     description: squish(item.description),
     status: normalizeStatus(item.status),
     plan: normalizePlan(item.plan),
     notes: normalizeNotes(item.notes),
-    due: item.due === undefined || item.due === null || item.due === "" ? null : String(item.due),
-    author: item.author === undefined || item.author === null || item.author === "" ? null : String(item.author)
+    due: strOrNull(item.due),
+    author: strOrNull(item.author)
   }
 }
 
@@ -223,9 +232,7 @@ function normalizeSync(sync) {
   for (var i = 0; i < sync.length; i++) {
     var t = sync[i]
     if (!t || typeof t !== "object") continue
-    var err = t.error && typeof t.error === "object"
-      ? { kind: squish(t.error.kind) || "error", message: t.error.message === undefined || t.error.message === null ? "" : String(t.error.message) }
-      : null
+    var err = t.error && typeof t.error === "object" ? { kind: squish(t.error.kind) || "error", message: str(t.error.message) } : null
     out.push({
       name: squish(t.name),
       enabled: t.enabled === true || t.enabled === "true",
@@ -262,32 +269,8 @@ function fromCli(raw) {
     })
     if (item) items.push(item)
   }
-  var focus = {
-    text: data.focus === undefined || data.focus === null ? "" : squish(data.focus),
-    taskId: data.focus_task === undefined || data.focus_task === null ? null : String(data.focus_task)
-  }
+  var focus = { text: squish(data.focus), taskId: strOrNull(data.focus_task) }
   return { ok: true, items: items, focus: focus, sync: normalizeSync(data.sync) }
-}
-
-// The reverse mapping: items and focus back to the canonical shape (tests
-// round-trip through it; ids that are numbers become numbers again).
-function toCli(items, focus) {
-  var tasks = []
-  var list = items || []
-  for (var i = 0; i < list.length; i++) {
-    var it = list[i]
-    tasks.push({
-      id: isNumericId(it.id) ? Number(it.id) : it.id, uid: it.uid, title: it.name, status: it.status,
-      notes: it.notes, plan: it.plan, description: it.description, due: it.due, author: it.author
-    })
-  }
-  var f = normalizeFocus(focus, null)
-  return {
-    version: 1,
-    focus: f.text === "" ? null : f.text,
-    focus_task: f.taskId === null ? null : (isNumericId(f.taskId) ? Number(f.taskId) : f.taskId),
-    tasks: tasks
-  }
 }
 
 // The reply of a write is the affected task as one JSON object (§3.6): an
@@ -321,32 +304,18 @@ function withRealId(action, idMap) {
 // here as `spawnFailed` (ArgvProcess); a wrapper script that cannot find the
 // real binary exits 127, which reads the same.
 function classifyExit(code, stderr, spawnFailed) {
-  if (spawnFailed || code === 127) return { kind: "missing", message: "todocli not found" }
+  if (spawnFailed || code === 127) return { kind: "missing", message: ERRORS.missing.reason }
   if (code === 0) return null
-  if (code === 75) return { kind: "busy", message: "database busy" }
+  if (code === 75) return { kind: "busy", message: ERRORS.busy.reason }
   var head = lines(stderr, 3)
   return { kind: "failed", message: head.length ? head.join("\n") : "todocli exited " + code }
 }
 
-function errorShort(error) {
-  if (!error) return ""
-  switch (error.kind) {
-    case "missing": return "todocli not found"
-    case "busy": return "Database busy or locked"
-    case "protocol": return "Can't read todocli output"
-    default: return "todocli error"
-  }
-}
+function errorCopy(error) { return ERRORS[error && error.kind] || ERRORS.failed }
 
-function unavailable(error) {
-  if (!error) return "unavailable"
-  switch (error.kind) {
-    case "missing": return "unavailable: todocli not found"
-    case "busy": return "unavailable: database busy"
-    case "protocol": return "unavailable: can't read todocli output"
-    default: return "unavailable: todocli error"
-  }
-}
+function errorShort(error) { return error ? errorCopy(error).short : "" }
+
+function unavailable(error) { return error ? "unavailable: " + errorCopy(error).reason : "unavailable" }
 
 // ---------------------------------------------------------------- mutations
 // One action vocabulary, shared by the keys (Keys.js emits it), the argv
@@ -449,8 +418,13 @@ function ipcReply(action, reply) {
   return action.type === "remove" && reply === "unknown id" ? "ok" : reply
 }
 
+// The two predicates every view, key and copy line shares.
 function isAttached(pomodoro, id) {
   return !!pomodoro && pomodoro.phase !== "idle" && pomodoro.taskId === String(id)
+}
+
+function isFocused(focus, id) {
+  return !!focus && focus.taskId === String(id)
 }
 
 // `d` on an open row (UX §4.2 done handling): remember its pre-tick status
@@ -739,32 +713,45 @@ function smallestInterval(sync) {
 
 // ---------------------------------------------------------------- errors
 
-// UX §7 copy. E4/E7/E8 replace the list (title, body, hint); E5 is a banner
-// above the last good list.
+// The UX §7 copy per error kind, in one table: `short` names it on the pill
+// and as the error-view title, `reason` is the `unavailable: <reason>` reply
+// and the classifyExit message, `body`/`hint` fill the error view (E4, E7,
+// E8), `banner` makes E5 a line above the last good list instead. An
+// unknown kind reads as E7. Adding a kind is one entry here.
+var ERRORS = {
+  missing: {
+    short: "todocli not found", reason: "todocli not found",
+    body: function(e, o) { return "This panel is set to backend = cli, but it can't run \"" + o.cliPath + "\". Nothing was changed." },
+    hint: function(e, o) { return "Point the panel at todocli:\n  omarchy bar set " + o.moduleName + " cliPath /path/to/todocli\nor go back to the panel's own list:\n  omarchy bar set " + o.moduleName + " backend json" }
+  },
+  busy: {
+    short: "Database busy or locked", reason: "database busy", glyph: G.lock,
+    banner: function(e, o) { return "Database busy or locked. " + (o.lastGoodAt ? "Showing the list from " + clockLabel(o.lastGoodAt, o.utc) + ". " : "") + "r retry" }
+  },
+  protocol: {
+    short: "Can't read todocli output", reason: "can't read todocli output",
+    body: function() { return "todocli answered, but not in the format this panel expects (JSON schema v1). Update the plugin or todocli so their versions match." }
+  },
+  failed: {
+    short: "todocli error", reason: "todocli error",
+    body: function(e) {
+      var head = lines(e.message, 3)
+      return (head.length ? head.join("\n") + "\n" : "") + "Run todocli board in a terminal to see the full error."
+    }
+  }
+}
+
 function errorView(error, opts) {
   if (!error) return null
   var o = opts || {}
-  var base = { glyph: G.alert, title: null, body: "", hint: "", banner: null }
-  switch (error.kind) {
-    case "missing":
-      base.title = "todocli not found"
-      base.body = "This panel is set to backend = cli, but it can't run \"" + (o.cliPath || "todocli") + "\". Nothing was changed."
-      base.hint = "Point the panel at todocli:\n  omarchy bar set " + (o.moduleName || "abobreshov.todo") + " cliPath /path/to/todocli\nor go back to the panel's own list:\n  omarchy bar set " + (o.moduleName || "abobreshov.todo") + " backend json"
-      return base
-    case "busy":
-      base.glyph = G.lock
-      base.banner = "Database busy or locked. " + (o.lastGoodAt ? "Showing the list from " + clockLabel(o.lastGoodAt, o.utc) + ". " : "") + "r retry"
-      return base
-    case "protocol":
-      base.title = "Can't read todocli output"
-      base.body = "todocli answered, but not in the format this panel expects (JSON schema v1). Update the plugin or todocli so their versions match."
-      return base
-    default: {
-      base.title = "todocli error"
-      var head = lines(error.message, 3)
-      base.body = (head.length ? head.join("\n") + "\n" : "") + "Run todocli board in a terminal to see the full error."
-      return base
-    }
+  var c = errorCopy(error)
+  var ctx = { cliPath: o.cliPath || DEFAULTS.cliPath, moduleName: o.moduleName || MODULE, lastGoodAt: o.lastGoodAt, utc: o.utc }
+  return {
+    glyph: c.glyph || G.alert,
+    title: c.banner ? null : c.short,
+    body: c.body ? c.body(error, ctx) : "",
+    hint: c.hint ? c.hint(error, ctx) : "",
+    banner: c.banner ? c.banner(error, ctx) : null
   }
 }
 
@@ -786,8 +773,8 @@ function dumpView(state) {
   var focus = s.focus || { text: "", taskId: null }
   return {
     version: 1,
-    backend: s.backend || "json",
-    cliPath: s.cliPath || "todocli",
+    backend: s.backend || DEFAULTS.backend,
+    cliPath: s.cliPath || DEFAULTS.cliPath,
     view: s.view || "list",
     stale: s.stale === true,
     error: s.error ? { kind: s.error.kind, message: s.error.message || "" } : null,
@@ -807,11 +794,11 @@ function dumpView(state) {
 function coerce(settings) {
   var s = settings || {}
   var maxChars = Number(s.maxChars)
-  if (s.maxChars === undefined || s.maxChars === null || isNaN(maxChars)) maxChars = 24
+  if (s.maxChars === undefined || s.maxChars === null || isNaN(maxChars)) maxChars = DEFAULTS.maxChars
   return {
-    backend: String(s.backend) === "cli" ? "cli" : "json",
-    cliPath: s.cliPath === undefined || s.cliPath === null || String(s.cliPath) === "" ? "todocli" : String(s.cliPath),
-    pomodoroTarget: s.pomodoroTarget === undefined || s.pomodoroTarget === null || String(s.pomodoroTarget) === "" ? "abobreshov.pomodoro" : String(s.pomodoroTarget),
+    backend: String(s.backend) === "cli" ? "cli" : DEFAULTS.backend,
+    cliPath: str(s.cliPath) || DEFAULTS.cliPath,
+    pomodoroTarget: str(s.pomodoroTarget) || DEFAULTS.pomodoroTarget,
     maxChars: maxChars < 0 ? 0 : maxChars
   }
 }
@@ -911,7 +898,7 @@ function pomodoroView(state, now) {
   if (phase === "idle") return idleView()
   if (running && now > endsAt + 10000) return idleView()
   var remaining = running ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : Math.max(0, Math.floor(Number(state.remaining) || 0))
-  var taskId = state.taskId === undefined || state.taskId === null ? "" : String(state.taskId)
+  var taskId = str(state.taskId)
   var label = squish(state.taskLabel)
   return { phase: phase, running: running, remaining: remaining, taskId: taskId, label: label, attached: taskId !== "" || label !== "" }
 }
@@ -934,7 +921,7 @@ function focusLine(items, focus, pomodoro) {
   if (task) {
     base.item = task
     base.text = task.name
-    var attached = pom.phase !== "idle" && pom.taskId === task.id
+    var attached = isAttached(pom, task.id)
     if (attached && pom.phase === "work" && pom.running) { base.variant = "F2"; base.timer = formatTime(pom.remaining); base.timerGlyph = G.pomodoro }
     else if (attached && pom.phase === "work") { base.variant = "F3"; base.timer = formatTime(pom.remaining) + " paused"; base.timerGlyph = G.pomodoro; base.timerDim = true }
     else if (attached) { base.variant = "F4"; base.timer = formatTime(pom.remaining); base.timerGlyph = G.brk; base.timerDim = true }
@@ -987,9 +974,8 @@ function statusLine(item, ctx) {
   var progress = planProgress(item)
   if (progress !== "") parts.push("plan " + progress)
   if (item.notes && item.notes.length > 0) parts.push(item.notes.length + " note" + (item.notes.length === 1 ? "" : "s"))
-  if (c.focus && c.focus.taskId === item.id) parts.push("focus")
-  var pom = c.pomodoro
-  if (pom && pom.phase !== "idle" && pom.taskId === item.id) parts.push(G.pomodoro + " " + formatTime(pom.remaining))
+  if (isFocused(c.focus, item.id)) parts.push("focus")
+  if (isAttached(c.pomodoro, item.id)) parts.push(G.pomodoro + " " + formatTime(c.pomodoro.remaining))
   if (c.backend === "cli" && item.due) parts.push("due " + dueLabel(item.due))
   return parts.join(" · ")
 }
@@ -998,19 +984,18 @@ function statusLine(item, ctx) {
 function actionTooltips(item, ctx) {
   var c = ctx || {}
   var it = item || { id: "", status: "todo" }
-  var pom = c.pomodoro
-  var attached = pom && pom.phase !== "idle" && pom.taskId === it.id
+  var attached = isAttached(c.pomodoro, it.id)
   var isDone = it.status === "done"
   var doneTip = "Done · d reopens it"
-  var pomTip = attached ? (pom.running ? "Pause pomodoro (p)" : "Resume pomodoro (p)") : "Start pomodoro (p)"
+  var pomTip = attached ? (c.pomodoro.running ? "Pause pomodoro (p)" : "Resume pomodoro (p)") : "Start pomodoro (p)"
   return {
     doing: isDone ? doneTip : (it.status === "doing" ? "Back to todo (s)" : "Mark doing (s)"),
     done: isDone ? "Reopen (d)" : "Mark done (d)",
-    focus: isDone ? doneTip : (c.focus && c.focus.taskId === it.id ? "Clear focus (f)" : "Set focus (f)"),
+    focus: isDone ? doneTip : (isFocused(c.focus, it.id) ? "Clear focus (f)" : "Set focus (f)"),
     pomodoro: isDone && !attached ? doneTip : pomTip,
     del: c.armed ? "Click again to delete" : "Delete (x x)",
     doingEnabled: !isDone,
     focusEnabled: !isDone,
-    pomodoroEnabled: !isDone || !!attached
+    pomodoroEnabled: !isDone || attached
   }
 }

@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { loadQmlJs } from "./qml-js-loader.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const Argv = loadQmlJs(path.join(here, "..", "Argv.js"));
+const Model = loadQmlJs(path.join(here, "..", "Model.js"));
+const Argv = loadQmlJs(path.join(here, "..", "Argv.js"), { Model });
 
 test("todocli: cliPath first, global flags, then the command, then -- and the free text", () => {
   assert.deepEqual(Argv.todocli("todocli", ["add", "--description=Semi-skimmed"], ["--help"]), ["todocli", "--source", "omarchy", "--json", "add", "--description=Semi-skimmed", "--", "--help"]);

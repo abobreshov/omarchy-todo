@@ -119,10 +119,7 @@ sleep 0.8
 check "AC-17.3 recovers when the binary is back" "$(dump | field 'd["error"]')" "None"
 stop
 
-start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
-sleep 0.3
-FAKE_EXIT=1 FAKE_STDERR="database is locked" true   # the fake reads its env at spawn time
-stop
+# The fake reads its env at spawn time, so the shell restarts with it set.
 export FAKE_EXIT=1 FAKE_STDERR="database is locked"
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8

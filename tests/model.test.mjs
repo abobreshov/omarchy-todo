@@ -149,20 +149,16 @@ test("fromCli: a bad document or an unknown version is the protocol error (E8)",
   assert.equal(Model.fromCli({ version: 1, tasks: "no" }).error.kind, "protocol");
 });
 
-test("toCli maps items and focus back to the canonical shape", () => {
-  const r = Model.fromCli(boardJson);
-  const doc = Model.toCli(r.items, r.focus);
-  assert.equal(doc.version, 1);
-  assert.equal(doc.focus, "Ship the invoice-export slice");
-  assert.equal(doc.focus_task, 3);
-  assert.equal(doc.tasks[0].id, 3);
-  assert.equal(doc.tasks[0].title, "Wire the webhook");
-  assert.equal(doc.tasks[0].uid, "01a0e9f9-1c84-70b7-9fa9-61617eeb93ac");
-  assert.deepEqual(doc.tasks[0].plan, [{ text: "map payload", done: true }]);
-  const json = Model.toCli([item("t1", "A", "todo")], { text: "", taskId: null });
-  assert.equal(json.focus, null);
-  assert.equal(json.focus_task, null);
-  assert.equal(json.tasks[0].id, "t1", "opaque json ids stay strings");
+test("isAttached and isFocused are the one predicate each for the views, the keys and the copy", () => {
+  const on12 = { phase: "work", running: false, remaining: 1, taskId: "12", label: "", attached: true };
+  assert.equal(Model.isAttached(on12, "12"), true);
+  assert.equal(Model.isAttached(on12, 12), true, "ids compare as strings");
+  assert.equal(Model.isAttached(on12, "3"), false);
+  assert.equal(Model.isAttached({ phase: "idle", taskId: "12" }, "12"), false, "idle is attached to nothing");
+  assert.equal(Model.isAttached(null, "12"), false);
+  assert.equal(Model.isFocused({ text: "", taskId: "12" }, 12), true);
+  assert.equal(Model.isFocused({ text: "t", taskId: null }, "12"), false);
+  assert.equal(Model.isFocused(null, "12"), false);
 });
 
 test("classifyExit maps exit codes to the UX §7 error kinds (A34)", () => {
@@ -180,6 +176,7 @@ test("errorShort and unavailable replies", () => {
   assert.equal(Model.errorShort({ kind: "busy" }), "Database busy or locked");
   assert.equal(Model.errorShort({ kind: "failed" }), "todocli error");
   assert.equal(Model.errorShort({ kind: "protocol" }), "Can't read todocli output");
+  assert.equal(Model.errorShort({ kind: "weird" }), "todocli error", "an unknown kind reads as E7");
   assert.equal(Model.errorShort(null), "");
   assert.equal(Model.unavailable({ kind: "missing" }), "unavailable: todocli not found");
   assert.equal(Model.unavailable({ kind: "busy" }), "unavailable: database busy");
@@ -568,9 +565,10 @@ test("dumpView produces the UX §10.3 shape", () => {
 });
 
 // ------------------------------------------------------------- settings
-test("coerce follows A18", () => {
-  assert.deepEqual(Model.coerce({}), { backend: "json", cliPath: "todocli", pomodoroTarget: "abobreshov.pomodoro", maxChars: 24 });
-  assert.deepEqual(Model.coerce(null), { backend: "json", cliPath: "todocli", pomodoroTarget: "abobreshov.pomodoro", maxChars: 24 });
+test("coerce follows A18, from the one DEFAULTS table", () => {
+  assert.deepEqual(Model.DEFAULTS, { backend: "json", cliPath: "todocli", pomodoroTarget: "abobreshov.pomodoro", maxChars: 24 });
+  assert.deepEqual(Model.coerce({}), Model.DEFAULTS);
+  assert.deepEqual(Model.coerce(null), Model.DEFAULTS);
   assert.equal(Model.coerce({ backend: "cli" }).backend, "cli");
   assert.equal(Model.coerce({ backend: "standalone" }).backend, "json");
   assert.equal(Model.coerce({ backend: true }).backend, "json");

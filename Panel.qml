@@ -32,10 +32,10 @@ Panel {
   // ---- settings (PLAN §6.5, A18): every read goes through setting() and
   //      Model.coerce; a backend change reloads from the other store.
   readonly property var cfg: Model.coerce({
-    backend: setting("backend", "json"),
-    cliPath: setting("cliPath", "todocli"),
-    pomodoroTarget: setting("pomodoroTarget", "abobreshov.pomodoro"),
-    maxChars: setting("maxChars", 24)
+    backend: setting("backend", Model.DEFAULTS.backend),
+    cliPath: setting("cliPath", Model.DEFAULTS.cliPath),
+    pomodoroTarget: setting("pomodoroTarget", Model.DEFAULTS.pomodoroTarget),
+    maxChars: setting("maxChars", Model.DEFAULTS.maxChars)
   })
   readonly property string backend: cfg.backend
   readonly property string cliPath: cfg.cliPath

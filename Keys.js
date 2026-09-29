@@ -45,15 +45,6 @@ function isDoneRow(item) {
   return !!item && item.status === "done"
 }
 
-function attachedTo(item, ctx) {
-  var pom = ctx.pomodoro
-  return !!item && !!pom && pom.phase !== "idle" && pom.taskId === item.id
-}
-
-function isFocused(item, ctx) {
-  return !!item && !!ctx.focus && ctx.focus.taskId === item.id
-}
-
 // Resolve one text key. `ctx`: { item, onFocusLine, focus, backend,
 // sessionDone, pomodoro }. Returns an action object or null.
 function keyAction(view, key, ctx) {
@@ -82,9 +73,9 @@ function keyAction(view, key, ctx) {
       return { type: "setStatus", id: item.id, status: item.status === "doing" ? "todo" : "doing" }
     case "f":
       if (done) return { type: "message", text: Model.msgDoneRow(item, c.backend) }
-      return { type: "focus", id: isFocused(item, c) ? "clear" : item.id }
+      return { type: "focus", id: Model.isFocused(c.focus, item.id) ? "clear" : item.id }
     case "p":
-      if (attachedTo(item, c)) return { type: "pausePomodoro" }
+      if (Model.isAttached(c.pomodoro, item.id)) return { type: "pausePomodoro" }
       if (done) return { type: "message", text: Model.msgDoneRow(item, c.backend) }
       return { type: "startPomodoro", id: item.id }
     default:
@@ -149,21 +140,22 @@ function backToList(ui) {
   disarm(ui)
 }
 
-// Enter / Space / Right / l on the list: open the cursor row.
+function openCompose(ui, prefill, actions) {
+  ui.view = "compose"
+  ui.composeField = "name"
+  ui.name = prefill
+  ui.description = ""
+  disarm(ui)
+  actions.push({ type: "composeOpened", prefill: prefill })
+}
+
+// Enter / Space / Right / l on the list: open the cursor row; the free-text
+// focus line (F6) opens compose pre-filled with its text.
 function activateRow(ui, ctx, actions) {
   var row = rowAt(ui, ctx)
   if (!row || row.selectable === false) return
-  if (row.kind === "focus" && !row.item) {
-    // F6: compose pre-filled with the focus text.
-    ui.view = "compose"
-    ui.composeField = "name"
-    ui.name = ctx.prefill || ""
-    ui.description = ""
-    disarm(ui)
-    actions.push({ type: "composeOpened", prefill: ui.name })
-    return
-  }
-  if (row.item) openDetail(ui, row.item.id)
+  if (row.kind === "focus" && !row.item) openCompose(ui, ctx.prefill || "", actions)
+  else if (row.item) openDetail(ui, row.item.id)
 }
 
 function handleDelete(ui, ctx, now, actions) {
@@ -196,11 +188,6 @@ function reduceUi(ui, event, ctx) {
   var now = ev.now || 0
   switch (ev.type) {
     case "open":
-      backToList(next)
-      next.cursor = 0
-      next.help = false
-      leaveCompose(next)
-      break
     case "close":
       backToList(next)
       next.cursor = 0
@@ -280,13 +267,8 @@ function reduceUi(ui, event, ctx) {
       var action = keyAction(next.view, ev.key, keyContext(next, c))
       if (!action) break
       if (action.type === "toggleHelp") next.help = !next.help
-      else if (action.type === "compose") {
-        next.view = "compose"
-        next.composeField = "name"
-        next.name = ""
-        next.description = ""
-        actions.push({ type: "composeOpened", prefill: "" })
-      } else actions.push(action)
+      else if (action.type === "compose") openCompose(next, "", actions)
+      else actions.push(action)
       break
     }
     default:

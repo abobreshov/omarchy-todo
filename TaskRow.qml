@@ -17,8 +17,8 @@ Item {
   readonly property bool armed: panel !== null && panel.ui.armedId === modelData.id
   readonly property bool isDone: modelData.status === "done"
   readonly property bool isDoing: modelData.status === "doing"
-  readonly property bool isFocus: panel !== null && panel.focusModel.taskId === modelData.id
-  readonly property bool attached: panel !== null && panel.pomodoro.phase !== "idle" && panel.pomodoro.taskId === modelData.id
+  readonly property bool isFocus: panel !== null && Model.isFocused(panel.focusModel, modelData.id)
+  readonly property bool attached: panel !== null && Model.isAttached(panel.pomodoro, modelData.id)
   readonly property bool disabled: panel !== null && panel.errored
   readonly property string progress: Model.planProgress(modelData)
   readonly property color fg: panel ? panel.contentForeground : Color.foreground
@@ -54,7 +54,7 @@ Item {
     anchors.left: parent.left
     anchors.leftMargin: Style.spacing.lg
     anchors.verticalCenter: parent.verticalCenter
-    text: row.isDone ? Model.G.done : (row.isDoing ? Model.G.doing : Model.G.todo)
+    text: Model.statusGlyph(row.modelData.status)
     // Ticking is no longer destructive: the box uses the accent under its
     // own pointer, and doing rows carry the accent always.
     color: row.checkHovered || row.isDoing

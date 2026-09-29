@@ -13,7 +13,7 @@ import { loadQmlJs } from "./qml-js-loader.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const Model = loadQmlJs(path.join(here, "..", "Model.js"));
-const Argv = loadQmlJs(path.join(here, "..", "Argv.js"));
+const Argv = loadQmlJs(path.join(here, "..", "Argv.js"), { Model });
 const fake = path.join(here, "fakebin", "todocli");
 
 function runArgv(argv, env) {

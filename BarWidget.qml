@@ -28,7 +28,7 @@ BarWidget {
   readonly property var panel: panelLoader.item
   readonly property bool opened: panel ? panel.opened === true : false
   readonly property int itemCount: panel ? panel.openCount : 0
-  readonly property var pill: panel ? panel.pill : Model.pillState({ backend: "json", loaded: false, items: [], focus: null, sync: [], vertical: root.vertical, maxChars: 24, now: 0 })
+  readonly property var pill: panel ? panel.pill : Model.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
   // Forwarded so opening another widget's popup closes this one cleanly.
   readonly property bool popoutSwitchClosing: panel ? panel.popoutSwitchClosing === true : false
 
