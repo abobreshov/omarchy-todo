@@ -39,6 +39,15 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
   (the pomodoro vendors a pinned copy): it hides Node's globals from the
   library under test, as a QML context does, and drops a module import
   (`.import QtQuick as Q`) that names no file.
+- `tests/fixtures/pomodoro-state-file.json`: the pomodoro plugin's state-file
+  golden, vendored byte for byte and pinned by SHA-256 in
+  `tests/pomodoro.test.mjs`, where every shape (running, paused, break,
+  idle) is read through `pomodoroView`; the two plugins agree on the file
+  by its bytes.
+- `tests/qml/run.sh`: a headless `qmltestrunner` probe of `TaskRow.qml`
+  (offscreen platform, the shell's `Ui`/`Commons`, Quickshell stubbed under
+  `tests/qml/imports`) that fails when the row's height or its icon
+  cluster's geometry changes on hover — the fixed-slot rule as a gate.
 
 - Focus line, `doing`/`done` states, a keyboard cursor (`j`/`k`, Enter),
   `d` done, `s` doing, `f` focus, `p` pomodoro, `r` reload, `R` sync,

@@ -3,7 +3,10 @@
 // of omarchy-shell's result and of the state file, and the transients.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lib, NOW, item, idle, onTask } from "./helpers.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
+import { lib, here, NOW, item, idle, onTask } from "./helpers.mjs";
 
 const Pomodoro = lib("Pomodoro.js");
 
@@ -78,4 +81,33 @@ test("pomodoroView reads the state file the way UX §6.5 tells readers to; anoth
   assert.equal(Pomodoro.parsePomodoroState("{bad").phase, "idle");
   assert.equal(Pomodoro.parsePomodoroState("42").phase, "idle", "valid JSON that is not an object reads as idle");
   assert.equal(Pomodoro.parsePomodoroState('{"version":1,"phase":"work","running":false,"remaining":7}').remaining, 7);
+});
+
+// The pomodoro plugin's own state-file golden (its test/fixtures/state-file.json,
+// what StateFile.stateFileDoc writes for running, paused, break and idle),
+// vendored byte for byte and pinned by SHA-256 the way the contract goldens
+// are: the two plugins agree on the file by its bytes. Re-vendor: copy the
+// golden over and paste the pin this test prints.
+const STATE_FILE_GOLDEN = path.join(here, "fixtures", "pomodoro-state-file.json");
+const STATE_FILE_SHA256 = "9d33cfd92488986d7025790ea153c71c74806e74842f731bd50487e2d2239f3a";
+
+test("the vendored pomodoro state-file golden is pinned and every shape reads through pomodoroView (UX §6.5)", () => {
+  const bytes = fs.readFileSync(STATE_FILE_GOLDEN);
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  assert.equal(sha, STATE_FILE_SHA256, "tests/fixtures/pomodoro-state-file.json drifted from the pomodoro plugin's golden; new pin: " + sha);
+  const docs = JSON.parse(bytes.toString("utf8"));
+  assert.deepEqual(Object.keys(docs), ["running", "paused", "break", "idle"]);
+  // Every shape round-trips the reader's parser and is version 1.
+  for (const doc of Object.values(docs)) {
+    assert.equal(doc.version, Pomodoro.STATE_VERSION);
+    assert.deepEqual(Pomodoro.parsePomodoroState(JSON.stringify(doc)), doc);
+  }
+  // Read at the writer's own clock (updatedAt 1 378 000 ms; work ends at 2 500 000).
+  const at = docs.running.updatedAt;
+  assert.deepEqual(Pomodoro.pomodoroView(docs.running, at), { phase: "work", running: true, remaining: 1122, taskId: "12", label: "Write UX spec for the panels", attached: true });
+  assert.deepEqual(Pomodoro.pomodoroView(docs.paused, at), { phase: "work", running: false, remaining: 1122, taskId: "12", label: "Write UX spec for the panels", attached: true });
+  assert.deepEqual(Pomodoro.pomodoroView(docs.break, at), { phase: "shortBreak", running: true, remaining: 300, taskId: "12", label: "Write UX spec for the panels", attached: true });
+  assert.deepEqual(Pomodoro.pomodoroView(docs.idle, at), idle);
+  // A running shape read more than 10 s after its end is idle (the stale rule).
+  assert.equal(Pomodoro.pomodoroView(docs.running, docs.running.endsAt + 10001).phase, "idle");
 });

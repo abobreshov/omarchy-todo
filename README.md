@@ -253,6 +253,9 @@ node --test --experimental-test-coverage --test-coverage-lines=95 \
 # qmllint with the Omarchy shell as the `qs` import root, gated on a baseline
 tools/qmllint.sh            # tools/qmllint.sh --update rewrites the baseline
 
+# Headless QML probe: TaskRow's geometry is one value before, during and after a hover (offscreen; no window)
+tests/qml/run.sh            # PROBE=1 prints the measurements
+
 # Manifest and file checks
 omarchy plugin validate .
 
@@ -268,9 +271,18 @@ pins the test prints). The same test drives the real binary, when one is at
 hand (`TODOCLI_BIN`, else `todocli` on PATH; `TODOCLI_REQUIRE_BIN=1` makes
 its absence a failure), under an environment that names every path todocli
 reads, so the live store is never touched. `tests/fixtures/pomodoro-state-file.json`
-is the pomodoro plugin's own state-file golden, vendored and pinned the same
-way, and `tests/qml-js-loader.mjs` is the one loader both plugins' unit tests
-use (the pomodoro vendors a pinned copy).
+is the pomodoro plugin's own state-file golden (its `test/fixtures/state-file.json`),
+vendored and pinned the same way in `tests/pomodoro.test.mjs`, which reads every
+shape through `pomodoroView`; and `tests/qml-js-loader.mjs` is the one loader
+both plugins' unit tests use (the pomodoro vendors a pinned copy).
+
+`tests/qml/run.sh` runs `tests/qml/tst_hover.qml` under `qmltestrunner` on the
+offscreen platform: the real `TaskRow.qml` against the installed shell's
+`Ui`/`Commons`, with the Quickshell types stubbed under `tests/qml/imports`
+(no window, no user config, nothing spawned). It is the fixed-slot rule of
+UX §4.2 as a gate: the row's height and its icon cluster's geometry are one
+value before, during and after a hover, including with the pointer resting
+on a ghost button (`docs/reports/HOVER-GLITCH-VIDEO.md` in the root repository).
 
 The lint recipe by hand: `/usr/lib/qt6/bin/qmllint -I <dir-with-a-qs-symlink>
 *.qml`, where `<dir>/qs -> /usr/share/omarchy/shell`. The baseline holds the
