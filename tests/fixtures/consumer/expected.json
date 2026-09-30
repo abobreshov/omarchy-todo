@@ -1,0 +1,77 @@
+{
+  "board-old-cli.json": {
+    "hasStreams": false,
+    "metadataControls": false,
+    "dump": {
+      "tab": "overview",
+      "streams": [],
+      "strip": null,
+      "horizonFilter": "all",
+      "moving": null,
+      "itemMetadata": {
+        "stream": null,
+        "horizon": null,
+        "priority": null,
+        "size": null,
+        "badge": ""
+      },
+      "openKeys": [
+        "id",
+        "title",
+        "status"
+      ]
+    }
+  },
+  "board-archived-home.json": {
+    "orphanIds": [
+      4,
+      7
+    ],
+    "streams": {
+      "4": "work: old",
+      "7": "work: zzz"
+    },
+    "group": "inbox",
+    "orphan": true
+  },
+  "board-ties.json": {
+    "overviewGroup": [
+      6,
+      2,
+      1,
+      3,
+      4,
+      5
+    ],
+    "tabFirstBlock": [
+      2,
+      1,
+      3,
+      4
+    ],
+    "tabSections": {
+      "yearly": [
+        5
+      ],
+      "long": [
+        6
+      ]
+    },
+    "dumpOpen": [
+      2,
+      4,
+      1,
+      3,
+      5,
+      6
+    ]
+  },
+  "board-empty-stream.json": {
+    "omittedGroup": "personal: goals",
+    "tab": "personal: goals",
+    "emptyMessage": "Nothing in personal: goals yet. Press + to add a todo."
+  },
+  "write-failed-refused.json": {
+    "rollback": "AC-ST.41"
+  }
+}
