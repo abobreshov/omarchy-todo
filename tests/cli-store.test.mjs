@@ -16,8 +16,16 @@ const Errors = lib("Errors.js");
 const Argv = lib("Argv.js");
 const fake = path.join(here, "fakebin", "todocli");
 
+// The suite's own knobs for the live-binary test (contract.test.mjs) are
+// not the plugin's environment: the fake stands in for the child the plugin
+// spawns, which never sees them, so a run with TODOCLI_BIN exported still
+// logs an empty TODOCLI_* set.
+const SUITE_KNOBS = ["TODOCLI_BIN", "TODOCLI_REQUIRE_BIN"];
+
 function runArgv(argv, env) {
-  const r = spawnSync(argv[0], argv.slice(1), { env: Object.assign({}, process.env, env || {}), encoding: "utf8" });
+  const inherited = Object.assign({}, process.env);
+  for (const k of SUITE_KNOBS) delete inherited[k];
+  const r = spawnSync(argv[0], argv.slice(1), { env: Object.assign(inherited, env || {}), encoding: "utf8" });
   return { code: r.status === null ? -1 : r.status, stdout: r.stdout || "", stderr: r.stderr || "", spawnFailed: !!r.error };
 }
 
