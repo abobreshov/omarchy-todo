@@ -5,6 +5,7 @@ import qs.Ui
 import "Model.js" as Model
 import "Store.js" as Store
 import "View.js" as View
+import "Chrome.js" as Chrome
 import "Pomodoro.js" as Pomodoro
 
 // Bar button for the todo plugin. Owns this instance's IPC handler and the
@@ -32,7 +33,7 @@ BarWidget {
   readonly property var panel: panelLoader.item
   readonly property bool opened: panel ? panel.opened === true : false
   readonly property int itemCount: panel ? panel.openCount : 0
-  readonly property var pill: panel ? panel.pill : View.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
+  readonly property var pill: panel ? panel.pill : Chrome.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
   // Forwarded so opening another widget's popup closes this one cleanly.
   readonly property bool popoutSwitchClosing: panel ? panel.popoutSwitchClosing === true : false
 

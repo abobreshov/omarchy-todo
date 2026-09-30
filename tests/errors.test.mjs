@@ -94,7 +94,7 @@ test("parseEnvelope reads the §3.5 envelope and nothing else", () => {
   assert.equal(Errors.parseEnvelope(null), null);
 });
 
-test("syncReason is the UX §4.7 copy per kind (View.reason delegates to it)", () => {
+test("syncReason is the UX §4.7 copy per kind (Chrome.reason delegates to it)", () => {
   assert.equal(Errors.syncReason({ kind: "auth" }), "signed out. Run: basecamp auth login");
   assert.equal(Errors.syncReason({ kind: "removals_held", message: "3 removals held" }), "3 removals held; review, then todocli sync basecamp --accept-remote-removals");
   assert.equal(Errors.syncReason({ kind: "weird", message: "line\nmore" }), "line");

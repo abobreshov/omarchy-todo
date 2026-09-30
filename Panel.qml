@@ -7,6 +7,7 @@ import qs.Ui
 import "Model.js" as Model
 import "Errors.js" as Errors
 import "View.js" as View
+import "Chrome.js" as Chrome
 import "Pomodoro.js" as Pomodoro
 import "Keys.js" as KeyMap
 
@@ -68,11 +69,11 @@ Panel {
   readonly property int firstRow: focusLineModel ? 1 : 0
   readonly property var rows: View.listRows(focusLineModel, listItems)
   readonly property var detailItem: Model.findItem(items, ui.selectedId)
-  readonly property var pill: View.pillState({
+  readonly property var pill: Chrome.pillState({
     backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
     sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
   })
-  readonly property var footerModel: store.hasSync ? View.footer(store.sync, clockNow, { syncing: store.syncing }) : null
+  readonly property var footerModel: store.hasSync ? Chrome.footer(store.sync, clockNow, { syncing: store.syncing }) : null
   readonly property var errorModel: Errors.errorView(store.error, { cliPath: cliPath, moduleName: moduleName })
   readonly property string banner: store.banner
   readonly property bool errored: store.error !== null
