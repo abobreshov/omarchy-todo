@@ -120,7 +120,7 @@ Panel {
   }
 
   function focusKeyCatcher() {
-    Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+    Qt.callLater(function() { if (bodyPanel) bodyPanel.focusKeys() })
   }
 
   function showMessage(text) {
@@ -160,7 +160,7 @@ Panel {
       case "message": showMessage(action.text); break
       case "close": root.close(); break
       case "switchPanel": root.switchPanel(action.direction); break
-      case "composeOpened": compose.open(action.prefill); break
+      case "composeOpened": bodyPanel.openCompose(action.prefill); break
       default: break
     }
   }
@@ -305,73 +305,8 @@ Panel {
     }
   }
 
-  KeyboardPanel {
-    id: panel
-    anchorItem: root.anchorItem
-    owner: root.barIdentity
-    bar: root.bar
-    open: root.opened
-    centerOnBar: true
-    focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(340))
-    contentHeight: panel.fittedContentHeight(bodyColumn.implicitHeight, Style.space(520))
-
-    PanelKeyCatcher {
-      id: keyCatcher
-      anchors.fill: parent
-      // While an editor field is focused, keys belong to the field.
-      blocked: compose.editing
-
-      onCloseRequested: root.dispatch({ type: "esc" })
-      onTabRequested: function(direction) { root.dispatch({ type: "tab", direction: direction }) }
-      onMoveRequested: function(dx, dy) { root.dispatch({ type: "move", dx: dx, dy: dy }) }
-      // Enter emits returnRequested + activateRequested, Space only the
-      // latter; both open a row or toggle a step, so one handler serves.
-      onActivateRequested: root.dispatch({ type: "enter" })
-      onDeleteRequested: root.dispatch({ type: "delete" })
-      onTextKey: function(t) { root.dispatch({ type: "key", key: t }) }
-
-      Flickable {
-        id: scroll
-        anchors.fill: parent
-        contentWidth: width
-        contentHeight: bodyColumn.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        interactive: contentHeight > height
-
-        Column {
-          id: bodyColumn
-          width: scroll.width
-          spacing: Style.spacing.lg
-
-          // The list and the cli error body share one header (UX §4.2, §7).
-          TaskList {
-            visible: root.ui.view === "list" || root.ui.view === "error"
-            width: parent.width
-            panel: root
-          }
-
-          ComposeView {
-            id: compose
-            visible: root.ui.view === "compose"
-            width: parent.width
-            panel: root
-          }
-
-          DetailView {
-            visible: root.ui.view === "detail"
-            width: parent.width
-            panel: root
-          }
-
-          StatusFooter {
-            visible: root.ui.view !== "compose" && ((root.footerModel !== null && root.ui.view !== "error") || root.message !== "")
-            width: parent.width
-            panel: root
-          }
-        }
-      }
-    }
+  PanelBody {
+    id: bodyPanel
+    host: root
   }
 }

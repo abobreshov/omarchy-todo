@@ -27,7 +27,7 @@
 ./Panel.qml: Member "family" not found on type "QObject" [missing-property]
 ./Panel.qml: Member "fontFamily" not found on type "QObject" [missing-property]
 ./Panel.qml: Member "foreground" not found on type "QObject" [missing-property]
-./Panel.qml: Member "lg" not found on type "QObject" [missing-property]
+./PanelBody.qml: Member "lg" not found on type "QObject" [missing-property]
 ./StatusFooter.qml: Member "caption" not found on type "QObject" [missing-property]
 ./StatusFooter.qml: Member "controlGap" not found on type "QObject" [missing-property]
 ./StatusFooter.qml: Member "lg" not found on type "QObject" [missing-property]

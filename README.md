@@ -219,7 +219,8 @@ it to a `todocli` command and both stores apply it through
 
 QML: `BarWidget.qml` (the pill and the IPC handler), `Panel.qml` (the
 composition root: settings, the store switch, the reducer wiring and the
-operations the IPC functions, keys and buttons call), the views
+operations the IPC functions, keys and buttons call), `PanelBody.qml` (the
+keyboard surface and view composition), the views
 `TaskList.qml` (header, banner, focus line, rows, help line and the error
 body), `ComposeView.qml`, `DetailView.qml`, `FocusLine.qml`, `TaskRow.qml`,
 `ErrorView.qml`, `StatusFooter.qml`, the stores `TodoStore.qml` (the
