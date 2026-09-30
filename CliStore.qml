@@ -12,7 +12,8 @@ import "Argv.js" as Argv
 // at a time, with one read after each; `sync all` runs single-flight
 // outside that FIFO. Writes are optimistic and reverted on failure, never
 // retried. Reads happen on load, on the change signal (a directory watch on
-// todocli's state dir plus the `refresh()` push), on `r`, on panel open,
+// the directory of the stamp the board document names, `stamp`, plus the
+// `refresh()` push), on `r`, on panel open,
 // every 30 s in an error state and every smallest enabled intervalSec while
 // the panel is open. In an error state the last list stays (`stale`) and
 // mutators reply `unavailable`. Inactive (backend json) it spawns nothing
@@ -25,7 +26,11 @@ TodoStore {
   banner: error && error.kind === "busy" ? Errors.errorView(error, { lastGoodAt: lastGoodAt }).banner : ""
 
   property string cliPath: "todocli"
-  readonly property string stampDir: Quickshell.env("HOME") + "/.local/state/todocli/"
+  // The directory of todocli's change stamp, taken from the first successful
+  // read (`stamp` in the board document, PLAN §3.10) and re-armed on every
+  // read; the XDG default stands in until a document names it (an older
+  // build prints none).
+  property string stampDir: Quickshell.env("HOME") + "/.local/state/todocli/"
   property bool readRequested: false
   property bool watchArmed: false
   property double lastGoodAt: 0
@@ -57,6 +62,7 @@ TodoStore {
       items = doc.items
       focus = doc.focus
       sync = doc.sync
+      if (Store.stampDir(doc.stamp) !== "") stampDir = Store.stampDir(doc.stamp)
       error = null
       stale = false
       loaded = true
@@ -128,18 +134,22 @@ TodoStore {
     return "ok"
   }
 
+  // A failed sync is the footer's transient (Errors.classifySync reads the
+  // envelope's kind), never the store's error: the list stays writable. Only
+  // a binary that cannot run at all is E4, as a read would find.
   function finishSync(code, spawnFailed, out, err) {
     syncing = false
-    var e = Errors.classifyExit(code, err, spawnFailed)
+    var e = Errors.classifySync(code, out, err, spawnFailed)
     if (!e) {
       Qt.callLater(store.read)
       syncFinished({ ok: true })
-    } else if (e.kind === "busy") syncFinished({ ok: false, message: Store.MSG_SYNC_RUNNING })
-    else {
-      error = e
-      stale = loaded
-      syncFinished({ ok: false, error: e })
+      return
     }
+    if (e.store) {
+      error = { kind: e.kind, message: e.message }
+      stale = loaded
+    }
+    syncFinished({ ok: false, message: e.message, kind: e.kind })
   }
 
   // ---- processes; follow-up work runs from `stopped`, never from inside
@@ -158,9 +168,11 @@ TodoStore {
     onFinished: function(code, spawnFailed, out, err) { store.finishSync(code, spawnFailed, out, err) }
   }
 
-  // ---- change signal: todocli replaces `<stampDir>/changed` after every
-  //      committed write (PLAN §3.10); the directory holds no database, so
-  //      the watch cannot self-trigger on reads (DECISIONS A-D4).
+  // ---- change signal: todocli replaces the stamp (`<stampDir>/changed`,
+  //      the path the board names) after every committed write (PLAN
+  //      §3.10); the directory holds no database, so the watch cannot
+  //      self-trigger on reads (DECISIONS A-D4). A new stampDir re-binds
+  //      the path, and the reload after the read re-arms the watch.
   property FileView stampWatch: FileView {
     path: store.stampDir
     watchChanges: store.active && store.watchArmed

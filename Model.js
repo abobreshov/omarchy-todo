@@ -240,9 +240,14 @@ function clockLabel(ms, utc) {
   return utc ? pad2(d.getUTCHours()) + ":" + pad2(d.getUTCMinutes()) : pad2(d.getHours()) + ":" + pad2(d.getMinutes())
 }
 
+// m:ss, h:mm:ss from an hour up (abobreshov.pomodoro Phase.formatTime: the
+// same text on both sides of the hand-off).
 function formatTime(seconds) {
   var s = Math.max(0, Math.floor(Number(seconds) || 0))
-  return Math.floor(s / 60) + ":" + pad2(s % 60)
+  var h = Math.floor(s / 3600)
+  var m = Math.floor((s % 3600) / 60)
+  if (h > 0) return h + ":" + pad2(m) + ":" + pad2(s % 60)
+  return m + ":" + pad2(s % 60)
 }
 
 // ---------------------------------------------------------------- labels

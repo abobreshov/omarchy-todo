@@ -147,6 +147,9 @@ test("noteTime, dueLabel, clockLabel and formatTime (UX §4.4, §6)", () => {
   assert.equal(Model.formatTime(1500), "25:00");
   assert.equal(Model.formatTime(0), "0:00");
   assert.equal(Model.formatTime(-4), "0:00");
+  assert.equal(Model.formatTime(65), "1:05");
+  assert.equal(Model.formatTime(3661), "1:01:01", "h:mm:ss from an hour up, as the pomodoro shows it");
+  assert.equal(Model.formatTime(5400), "1:30:00");
 });
 
 // ------------------------------------------------------------- settings

@@ -62,9 +62,10 @@ function stateDir(dir) {
   return ["install", "-d", "-m", "0700", String(dir)]
 }
 
-// The pomodoro's label rule (A53), applied before the hand-off so both
-// plugins agree on the text.
+// The pomodoro's label rule (A53; abobreshov.pomodoro Phase.sanitizeLabel):
+// controls (C0, DEL, C1) become spaces, trimmed, at most 120 characters,
+// applied before the hand-off so both plugins agree on the text.
 function sanitizeLabel(value) {
   if (value === undefined || value === null) return ""
-  return String(value).replace(/[\x00-\x1f\x7f]/g, " ").replace(/^\s+|\s+$/g, "").slice(0, 120)
+  return String(value).replace(/[\x00-\x1f\x7f-\x9f]/g, " ").replace(/^\s+|\s+$/g, "").slice(0, 120)
 }

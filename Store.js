@@ -12,9 +12,9 @@
 // `fromCli` and maps an optimistic add's temporary id to the id todocli
 // replied with (`rememberId`, `withRealId`).
 
-// The stores' own transients (UX §4.5, §7 E14).
+// The stores' own transients (UX §4.5, §7 E14); the cli store's sync
+// transients are Errors.classifySync's.
 var MSG_SYNC_NEEDS_CLI = "Sync needs backend = cli."
-var MSG_SYNC_RUNNING = "Sync already running."
 var MSG_UNREADABLE = "Couldn't read todos.json. Fix or delete it — changes won't be saved until then."
 
 // ---------------------------------------------------------------- json
@@ -104,8 +104,10 @@ function smallestInterval(sync) {
   return best
 }
 
-// `board --json` (PLAN §3.7, A39) -> { ok, items, focus, sync } or the
-// protocol error (E8) for a document this panel does not understand.
+// `board --json` (PLAN §3.7, A39) -> { ok, items, focus, sync, stamp } or
+// the protocol error (E8) for a document this panel does not understand.
+// `stamp` is the change stamp's path (§3.10) as todocli publishes it, or
+// null from a build that does not; the store watches its directory.
 function fromCli(raw) {
   var data = raw
   if (typeof raw === "string") {
@@ -129,7 +131,16 @@ function fromCli(raw) {
     if (item) items.push(item)
   }
   var focus = { text: Model.squish(data.focus), taskId: Model.strOrNull(data.focus_task) }
-  return { ok: true, items: items, focus: focus, sync: normalizeSync(data.sync) }
+  return { ok: true, items: items, focus: focus, sync: normalizeSync(data.sync), stamp: Model.strOrNull(data.stamp) }
+}
+
+// The directory the change stamp lives in, with its trailing slash (the
+// FileView watches the directory, never the stamp: it is replaced by a new
+// inode on every write); "" for no stamp.
+function stampDir(stamp) {
+  var s = Model.str(stamp)
+  var cut = s.lastIndexOf("/")
+  return cut <= 0 ? "" : s.slice(0, cut + 1)
 }
 
 // The reply of a write is the affected task as one JSON object (§3.6): an

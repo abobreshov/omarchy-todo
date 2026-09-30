@@ -70,10 +70,17 @@ function classifyShell(code, stdout, stderr, spawnFailed) {
 
 // ---------------------------------------------------------------- state file
 
+// The state file's version this reader understands (abobreshov.pomodoro
+// StateFile.STATE_VERSION); any other reads as idle, as the writer's own
+// parser treats it.
+var STATE_VERSION = 1
+
 // The reader's view of the pomodoro state file (UX §6.5): remaining from
-// `endsAt` while running; `running && now > endsAt + 10 s` reads as idle.
+// `endsAt` while running; `running && now > endsAt + 10 s` reads as idle;
+// a file of another version reads as idle.
 function pomodoroView(state, now) {
   if (!state || typeof state !== "object") return Model.idleView()
+  if (Number(state.version) !== STATE_VERSION) return Model.idleView()
   var phase = Model.squish(state.phase) || "idle"
   var running = state.running === true
   var endsAt = Number(state.endsAt) || 0

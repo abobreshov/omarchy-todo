@@ -20,7 +20,9 @@ QtObject {
   property double now: Date.now()
   property var state: null
   readonly property var view: Pomodoro.pomodoroView(state, now)
-  readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/abobreshov.pomodoro/"
+  // The pomodoro's state directory is its plugin id's (PLAN §7.5), and the
+  // IPC target is that id: the configurable `pomodoroTarget` names both.
+  readonly property string stateDir: Quickshell.env("HOME") + "/.local/state/" + target + "/"
 
   // {ok: true, word} or {ok: false, kind: missing|old|transient, text},
   // with the item the call was for (null for a label-only start or a pause).

@@ -59,8 +59,9 @@ test("stateDir: install -d -m 0700, never mkdir -p (A34, AC-2.10)", () => {
   assert.deepEqual(Argv.stateDir("/home/x/.local/state/abobreshov.todo/"), ["install", "-d", "-m", "0700", "/home/x/.local/state/abobreshov.todo/"]);
 });
 
-test("sanitizeLabel maps controls to a space, trims and caps at 120 (A53)", () => {
+test("sanitizeLabel maps controls (C0, DEL, C1) to a space, trims and caps at 120 (A53; the pomodoro's rule)", () => {
   assert.equal(Argv.sanitizeLabel("a\tb\nc\x00d"), "a b c d");
+  assert.equal(Argv.sanitizeLabel("  a\tb\nc\x00d\x7fe\x85f  "), "a b c d e f", "the same input as Phase.sanitizeLabel's test");
   assert.equal(Argv.sanitizeLabel("  x  "), "x");
   assert.equal(Argv.sanitizeLabel("y".repeat(200)).length, 120);
   assert.equal(Argv.sanitizeLabel(null), "");

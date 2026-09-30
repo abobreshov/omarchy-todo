@@ -55,22 +55,27 @@ test("classifyShell maps omarchy-shell results to E11, E12 and transients", () =
   assert.deepEqual(Pomodoro.classifyShell(0, "", "", true), { ok: false, kind: "transient", text: "omarchy-shell not found" });
 });
 
-test("pomodoroView reads the state file the way UX §6.5 tells readers to", () => {
+test("pomodoroView reads the state file the way UX §6.5 tells readers to; another version reads as idle", () => {
+  const v1 = (over) => Object.assign({ version: 1 }, over);
   assert.deepEqual(Pomodoro.pomodoroView(null, NOW), idle);
-  const running = Pomodoro.pomodoroView({ version: 1, phase: "work", running: true, endsAt: NOW + 1122 * 1000 + 400, remaining: 1500, taskId: "12", taskLabel: "Write", completed: 2 }, NOW);
+  const running = Pomodoro.pomodoroView(v1({ phase: "work", running: true, endsAt: NOW + 1122 * 1000 + 400, remaining: 1500, taskId: "12", taskLabel: "Write", completed: 2 }), NOW);
   assert.deepEqual(running, { phase: "work", running: true, remaining: 1123, taskId: "12", label: "Write", attached: true });
-  const paused = Pomodoro.pomodoroView({ phase: "work", running: false, endsAt: 0, remaining: 1122, taskId: "", taskLabel: "" }, NOW);
+  const paused = Pomodoro.pomodoroView(v1({ phase: "work", running: false, endsAt: 0, remaining: 1122, taskId: "", taskLabel: "" }), NOW);
   assert.equal(paused.remaining, 1122);
   assert.equal(paused.attached, false);
-  const stale = Pomodoro.pomodoroView({ phase: "work", running: true, endsAt: NOW - 11000, remaining: 5, taskId: "12" }, NOW);
+  const stale = Pomodoro.pomodoroView(v1({ phase: "work", running: true, endsAt: NOW - 11000, remaining: 5, taskId: "12" }), NOW);
   assert.equal(stale.phase, "idle");
-  const grace = Pomodoro.pomodoroView({ phase: "work", running: true, endsAt: NOW - 9000, remaining: 5, taskId: "12" }, NOW);
+  const grace = Pomodoro.pomodoroView(v1({ phase: "work", running: true, endsAt: NOW - 9000, remaining: 5, taskId: "12" }), NOW);
   assert.equal(grace.phase, "work");
   assert.equal(grace.remaining, 0);
   assert.equal(Pomodoro.pomodoroView("not an object", NOW).phase, "idle");
-  assert.equal(Pomodoro.pomodoroView({ phase: "idle", running: true, endsAt: NOW + 5000 }, NOW).phase, "idle", "an idle file reads as idle whatever else it says");
-  assert.equal(Pomodoro.pomodoroView({ phase: "shortBreak", running: true, endsAt: NOW + 190000, taskId: "3", taskLabel: "T" }, NOW).phase, "shortBreak");
+  assert.equal(Pomodoro.pomodoroView(v1({ phase: "idle", running: true, endsAt: NOW + 5000 }), NOW).phase, "idle", "an idle file reads as idle whatever else it says");
+  assert.equal(Pomodoro.pomodoroView(v1({ phase: "shortBreak", running: true, endsAt: NOW + 190000, taskId: "3", taskLabel: "T" }), NOW).phase, "shortBreak");
+  assert.equal(Pomodoro.STATE_VERSION, 1);
+  assert.deepEqual(Pomodoro.pomodoroView({ phase: "work", running: true, endsAt: NOW + 5000, taskId: "3" }, NOW), idle, "no version: idle");
+  assert.deepEqual(Pomodoro.pomodoroView(v1({ version: 2, phase: "work", running: true, endsAt: NOW + 5000, taskId: "3" }), NOW), idle, "version 2: idle, as the writer's own parser reads it");
+  assert.equal(Pomodoro.pomodoroView({ version: "1", phase: "work", running: false, remaining: 7 }, NOW).remaining, 7, "a numeric string is the number");
   assert.equal(Pomodoro.parsePomodoroState("{bad").phase, "idle");
   assert.equal(Pomodoro.parsePomodoroState("42").phase, "idle", "valid JSON that is not an object reads as idle");
-  assert.equal(Pomodoro.parsePomodoroState('{"phase":"work","running":false,"remaining":7}').remaining, 7);
+  assert.equal(Pomodoro.parsePomodoroState('{"version":1,"phase":"work","running":false,"remaining":7}').remaining, 7);
 });
