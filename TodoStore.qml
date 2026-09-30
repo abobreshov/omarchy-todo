@@ -8,6 +8,8 @@ import QtQuick
 // (cli: after the write; json: one event-loop turn later).
 QtObject {
   property var items: []
+  property var streams: []
+  property bool hasStreams: false
   property var focus: ({ text: "", taskId: null })
   property bool loaded: false
   property var error: null      // {kind, message} | null (UX §7 E4, E5, E7, E8)

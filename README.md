@@ -196,13 +196,14 @@ rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 
 ## Development
 
-All logic lives in nine `.pragma library` files, one concern each; the QML
+All logic lives in ten `.pragma library` files, one concern each; the QML
 files bind and forward.
 
 | Library | Holds |
 | --- | --- |
-| `Model.js` | The item model and the shared vocabulary: the glyphs, `DEFAULTS` and `coerce` (settings), text and time formatting, the item normaliser, the focus link, `isAttached`/`isFocused`. |
-| `Store.js` | The json document (version 2, reads version 1), the `board --json` mapping (`fromCli`) and the sync block, `reduce(doc, action)`, the one mutation API. |
+| `Model.js` | The fourteen-field item model (including stream, labels, horizon, priority and size), the catalogue normaliser, glyphs, settings, text/time formatting and the focus link. |
+| `Priority.js` | Strict document priority/size normalisers and the contract's level, size and horizon constants. |
+| `Store.js` | The json document (version 2, reads version 1), `board --json` metadata/catalogue mapping and capability detection, sync block and `reduce(doc, action)`, including move, priority and size writes. |
 | `Queue.js` | The cli store's ordering rules, rollback rebase and optimistic id map and write-reply codec. |
 | `Errors.js` | The cli error kinds (E4, E5, E7, E8) in one table: `classifyExit`, `unavailable`, `errorView`, `msgNotSaved`. |
 | `View.js` | View decisions and copy: list order and the session's done rows, `focusLine`, `statusLine`/`actionTooltips`, the transients, `dumpView`. |

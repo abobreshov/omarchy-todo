@@ -3,9 +3,64 @@
 // pill label rules (UX §3.1, A10, A19) and the settings coercion (A18).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lib, G, NOW, item, idle } from "./helpers.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { lib, G, NOW, item, idle, here } from "./helpers.mjs";
 
 const Model = lib("Model.js");
+
+test("metadata defaults, document coercion and copies keep one task shape (UI-30)", () => {
+  const defaults = { stream: null, labels: [], horizon: "short", priority: null, size: null };
+  const fields = (it) => Object.fromEntries(Object.keys(defaults).map((k) => [k, it[k]]));
+  assert.deepEqual(fields(Model.normalize({ name: "x" })), defaults);
+  const input = { name: "x", stream: "  work:  tellkin  ", labels: ["q4", 7, null, "lease"], horizon: "mid", priority: 0, size: "M" };
+  const full = Model.normalize(input);
+  assert.deepEqual(fields(full), { stream: "work: tellkin", labels: ["q4", "lease"], horizon: "mid", priority: 0, size: "M" });
+  assert.notEqual(full.labels, input.labels);
+  assert.deepEqual(fields(Model.normalize({ name: "x", stream: " ", labels: "q4", horizon: "unknown" })), defaults);
+  for (const horizon of ["short", "mid", "yearly", "long"]) assert.equal(Model.normalize({ name: "x", horizon }).horizon, horizon);
+  const copy = Model.copyItem(full);
+  assert.deepEqual(copy, full);
+  assert.notEqual(copy.labels, full.labels);
+  copy.labels.push("new");
+  assert.deepEqual(full.labels, ["q4", "lease"]);
+  assert.equal(copy.priority, 0);
+});
+
+test("normalizeStreams keeps all nine keys, archived homes and document order; junk is total", () => {
+  const board = JSON.parse(fs.readFileSync(path.join(here, "fixtures/provisional/board-streams.json"), "utf8"));
+  assert.deepEqual(Model.normalizeStreams(board.streams), board.streams);
+  assert.deepEqual(Model.normalizeStreams(null), []);
+  assert.deepEqual(Model.normalizeStreams([null, 1, "x", {}, { uid: "a" }, { key: "a" }]), []);
+  const normalized = Model.normalizeStreams([{ uid: " u ", key: " k ", group: "g", name: 3, position: 2.5, system: true, createdAt: "at", archivedAt: "later", open: 2 }]);
+  assert.deepEqual(normalized, [{ uid: "u", key: "k", group: "g", name: "3", position: 2.5, system: true, createdAt: "at", archivedAt: "later", open: 2 }]);
+  for (const v of [undefined, null, "1", Infinity, NaN, -1, 1.5]) {
+    const n = Model.normalizeStreams([{ uid: "u", key: "k", position: v, archivedAt: v, open: v }])[0];
+    assert.equal(n.position, typeof v === "number" && Number.isFinite(v) ? v : 0);
+    assert.equal(n.open, 0);
+    assert.equal(n.archivedAt, typeof v === "string" ? v : null);
+    assert.equal(n.system, false);
+  }
+  assert.equal(Model.normalizeStreams([{ uid: "u", key: "k", archivedAt: "" }])[0].archivedAt, null);
+});
+
+test("UX §18: root JS has no metadata truthiness; each grep rule detects planted bad lines", () => {
+  const rules = [
+    [/\.(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["it.priority || null", "it.size && x", "it.priority ? a : b"]],
+    [/!\s*!?\s*[\w$.]*\.(priority|size|stream|labels|horizon)\b/, ["!it.size", "!!it.priority"]],
+    [/if\s*\(\s*[\w$.]*\.(priority|size|stream|labels|horizon)\s*\)/, ["if (it.priority)"]],
+    [/\b(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["priority || null", "size && x", "horizon ? a : b"]],
+  ];
+  for (const [regex, planted] of rules) {
+    for (const bad of planted) assert.equal(regex.test(bad), true, bad);
+    for (const good of ["it.priority !== null", "Priority.normalize(v)", 'typeof v === "number"']) assert.equal(regex.test(good), false, good);
+    for (const file of fs.readdirSync(path.join(here, "..")).filter((f) => f.endsWith(".js"))) {
+      fs.readFileSync(path.join(here, "..", file), "utf8").split("\n").forEach((line, i) => {
+        assert.equal(regex.test(line), false, `${file}:${i + 1}: ${line}`);
+      });
+    }
+  }
+});
 
 // ---------------------------------------------------------------- squish/ids
 test("squish and makeId keep the upstream behaviour", () => {
@@ -39,7 +94,7 @@ test("normalize keeps status, plan and notes and drops junk (A17)", () => {
   assert.equal(Model.normalize("x"), null);
   assert.equal(Model.normalize({ name: "   " }), null);
   const n = Model.normalize({ id: " 7 ", name: " Buy  milk ", description: " x  y ", status: "DOING", plan: [{ text: "a", done: 1 }, { text: "" }, "junk"], notes: [{ at: "t", text: "n" }, { text: "" }], due: "2026-10-01", author: "Ann", uid: "u1" });
-  assert.deepEqual(n, { id: "7", uid: "u1", name: "Buy milk", description: "x y", status: "doing", plan: [{ text: "a", done: true }], notes: [{ at: "t", text: "n" }], due: "2026-10-01", author: "Ann" });
+  assert.deepEqual(n, item("7", "Buy milk", "doing", { uid: "u1", description: "x y", plan: [{ text: "a", done: true }], notes: [{ at: "t", text: "n" }], due: "2026-10-01", author: "Ann" }));
   assert.equal(Model.normalize({ name: "x", status: "weird" }).status, "todo");
   assert.match(Model.normalize({ name: "x" }).id, /^t/);
   assert.equal(Model.normalize({ name: "x", plan: "no", notes: 3 }).plan.length, 0);

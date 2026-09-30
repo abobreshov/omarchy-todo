@@ -16,7 +16,8 @@ import "Argv.js" as Argv
 // after it (Queue.rebase), so their optimistic changes stay. A read paints
 // only when no write finished since it began (Queue.readApplies, the
 // write generation), so a read that started before a commit never shows
-// the pre-write board over the optimistic list. Reads happen on load, on
+// the pre-write board over the optimistic list; the catalogue applies with
+// the items in that same read. Reads happen on load, on
 // the change signal (a directory watch on
 // the directory of the stamp the board document names, `stamp`, plus the
 // `refresh()` push), on `r`, on panel open,
@@ -73,6 +74,8 @@ TodoStore {
       // so it never undoes an optimistic change.
       items = doc.items
       focus = doc.focus
+      streams = doc.streams
+      hasStreams = doc.hasStreams
       sync = doc.sync
       if (Store.stampDir(doc.stamp) !== "") stampDir = Store.stampDir(doc.stamp)
       error = null
@@ -103,6 +106,7 @@ TodoStore {
     if (error) return Errors.unavailable(error)
     var r = Store.reduce({ items: items, focus: focus }, action)
     if (!r.ok) return r.reply
+    if (r.action === null) return r.reply
     var prev = { items: items, focus: focus }
     items = r.doc.items
     focus = r.doc.focus

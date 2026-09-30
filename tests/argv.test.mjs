@@ -6,6 +6,32 @@ import { lib } from "./helpers.mjs";
 
 const Argv = lib("Argv.js");
 
+test("CONTRACT-S9 §10: attached add flags in stream, horizon, description order", () => {
+  const cases = [
+    [{}, ["todocli", "--source", "omarchy", "--json", "add", "--description=d", "--", "Name"]],
+    [{ horizon: "yearly" }, ["todocli", "--source", "omarchy", "--json", "add", "--horizon=yearly", "--description=d", "--", "Name"]],
+    [{ stream: "work: tellkin" }, ["todocli", "--source", "omarchy", "--json", "add", "--stream=work: tellkin", "--description=d", "--", "Name"]],
+    [{ stream: "work: tellkin", horizon: "mid" }, ["todocli", "--source", "omarchy", "--json", "add", "--stream=work: tellkin", "--horizon=mid", "--description=d", "--", "Name"]],
+  ];
+  for (const [fields, expected] of cases) assert.deepEqual(Argv.forAction("todocli", { type: "add", name: "Name", description: "d", ...fields }), expected);
+  for (const value of [undefined, null, ""]) {
+    assert.deepEqual(Argv.forAction("todocli", { type: "add", name: "Name", stream: value, horizon: value }), ["todocli", "--source", "omarchy", "--json", "add", "--", "Name"]);
+  }
+});
+
+test("CONTRACT-S9 §10: move and numeric priority/size writes keep global flags first", () => {
+  const cases = [
+    [{ type: "move", id: 12, stream: "work: tellkin" }, ["todocli", "--source", "omarchy", "--json", "move", "12", "work: tellkin"]],
+    [{ type: "move", id: 12, stream: "inbox" }, ["todocli", "--source", "omarchy", "--json", "move", "12", "inbox"]],
+    [{ type: "setPriority", id: 4, value: 75 }, ["todocli", "--source", "omarchy", "--json", "priority", "4", "75"]],
+    [{ type: "setPriority", id: 4, value: 0 }, ["todocli", "--source", "omarchy", "--json", "priority", "4", "0"]],
+    [{ type: "setPriority", id: 4, value: null }, ["todocli", "--source", "omarchy", "--json", "priority", "4", "none"]],
+    [{ type: "setSize", id: 3, value: "S" }, ["todocli", "--source", "omarchy", "--json", "size", "3", "S"]],
+    [{ type: "setSize", id: 3, value: null }, ["todocli", "--source", "omarchy", "--json", "size", "3", "none"]],
+  ];
+  for (const [action, expected] of cases) assert.deepEqual(Argv.forAction("todocli", action), expected);
+});
+
 test("todocli: cliPath first, global flags, then the command, then -- and the free text", () => {
   assert.deepEqual(Argv.todocli("todocli", ["add", "--description=Semi-skimmed"], ["--help"]), ["todocli", "--source", "omarchy", "--json", "add", "--description=Semi-skimmed", "--", "--help"]);
   assert.deepEqual(Argv.todocli("/home/abobreshov/.cargo/bin/todocli", ["add", "--description=Semi-skimmed"], ["--help"]), ["/home/abobreshov/.cargo/bin/todocli", "--source", "omarchy", "--json", "add", "--description=Semi-skimmed", "--", "--help"]);

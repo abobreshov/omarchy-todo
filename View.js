@@ -252,7 +252,20 @@ function dumpView(state) {
   var done = []
   for (var i = 0; i < sorted.length; i++) {
     var it = sorted[i]
-    if (it.status !== "done") open.push({ id: it.id, title: it.name, status: it.status })
+    if (it.status !== "done") {
+      var entry = { id: it.id, title: it.name, status: it.status }
+      if (s.hasStreams === true) {
+        entry.stream = it.stream
+        entry.horizon = it.horizon
+        entry.labels = it.labels.slice()
+        entry.priority = it.priority
+        entry.size = it.size
+        var catalogue = Array.isArray(s.streams) ? s.streams : []
+        var home = catalogue.filter(function(t) { return t.key === it.stream })[0]
+        if (!home || home.archivedAt !== null) entry.orphan = true
+      }
+      open.push(entry)
+    }
     else if (sessionDone[it.id]) done.push({ id: it.id, title: it.name })
   }
   var focus = s.focus || { text: "", taskId: null }

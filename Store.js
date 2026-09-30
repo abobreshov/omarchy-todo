@@ -1,5 +1,6 @@
 .pragma library
 .import "Model.js" as Model
+.import "Priority.js" as Priority
 
 // The two document shapes and the one mutation API (PLAN §6.3, §6.4, A17,
 // A34). Pure and total, as Model.js; both stores apply every change through
@@ -104,7 +105,7 @@ function smallestInterval(sync) {
   return best
 }
 
-// `board --json` (PLAN §3.7, A39) -> { ok, items, focus, sync, stamp } or
+// `board --json` -> { ok, items, focus, streams, hasStreams, sync, stamp } or
 // the protocol error (E8) for a document this panel does not understand.
 // `stamp` is the change stamp's path (§3.10) as todocli publishes it, or
 // null from a build that does not; the store watches its directory.
@@ -126,12 +127,17 @@ function fromCli(raw) {
     if (!t || typeof t !== "object") continue
     var item = Model.normalize({
       id: t.id, uid: t.uid, name: t.title, description: t.description, status: t.status,
-      plan: t.plan, notes: t.notes, due: t.due, author: t.author
+      plan: t.plan, notes: t.notes, due: t.due, author: t.author,
+      stream: t.stream, labels: t.labels, horizon: t.horizon, priority: t.priority, size: t.size
     })
     if (item) items.push(item)
   }
   var focus = { text: Model.squish(data.focus), taskId: Model.strOrNull(data.focus_task) }
-  return { ok: true, items: items, focus: focus, sync: normalizeSync(data.sync), stamp: Model.strOrNull(data.stamp) }
+  return {
+    ok: true, items: items, focus: focus,
+    streams: Model.normalizeStreams(data.streams), hasStreams: Array.isArray(data.streams),
+    sync: normalizeSync(data.sync), stamp: Model.strOrNull(data.stamp)
+  }
 }
 
 // The directory the change stamp lives in, with its trailing slash (the
@@ -147,7 +153,9 @@ function stampDir(stamp) {
 // One action vocabulary, shared by the keys (Keys.js emits it), the argv
 // (Argv.forAction maps it to a todocli command) and both stores (they apply
 // it through `reduce`):
-//   {type: "add", name, description}   {type: "setStatus", id, status}
+//   {type: "add", name, description} (optional stream and horizon)
+//   {type: "setStatus", id, status}    {type: "move", id, stream}
+//   {type: "setPriority", id, value}   {type: "setSize", id, value}
 //   {type: "focus", id | "clear"}      {type: "toggleStep", id, n}
 //   {type: "remove", id}
 // Every mutator returns the same shape, {ok, doc: {items, focus}, reply,
@@ -155,6 +163,7 @@ function stampDir(stamp) {
 // is reverted by keeping the previous doc; `reply` is the IPC reply of UX
 // §10.3 (the clean name for add, "ok", or the refusal); `action` is the
 // normalised action to persist (squished text, string ids, numeric step).
+// Accepted no-op: reply "ok", action null; the cli store queues nothing.
 
 function docOf(doc) {
   var d = doc || {}
@@ -180,12 +189,54 @@ function clearFocusIf(focus, id) {
 
 // `id` is given only by `Queue.rebase`, replaying an optimistic add under its own
 // temporary id; a fresh add mints one.
-function addItem(doc, name, description, id) {
+function addItem(doc, name, description, id, stream, horizon) {
   var d = docOf(doc)
   var cleanName = Model.squish(name)
   if (cleanName === "") return refused(d, "empty")
-  var item = Model.normalize({ id: id, name: cleanName, description: description, status: "todo" })
-  return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, { type: "add", name: cleanName, description: item.description }, item)
+  var key = Model.strOrNull(Model.squish(stream))
+  var item = Model.normalize({
+    id: id, name: cleanName, description: description, status: "todo",
+    stream: key === null ? "inbox" : key, horizon: horizon,
+    labels: [], priority: null, size: null
+  })
+  var action = { type: "add", name: cleanName, description: item.description }
+  if (stream !== undefined && stream !== null) action.stream = item.stream
+  if (horizon !== undefined && horizon !== null) action.horizon = item.horizon
+  return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, action, item)
+}
+
+// Stream resolution belongs to P3; the catalogue is never optimistic state.
+function move(doc, id, stream) {
+  var d = docOf(doc)
+  var it = Model.findItem(d.items, id)
+  if (!it) return refused(d, "unknown id")
+  var key = Model.squish(stream)
+  if (it.stream === key) return accepted(d, "ok", null)
+  var items = replaceItem(d.items, id, function(c) { c.stream = key })
+  return accepted({ items: items, focus: d.focus }, "ok", { type: "move", id: String(id), stream: key })
+}
+
+function setPriority(doc, id, value) {
+  var d = docOf(doc)
+  var it = Model.findItem(d.items, id)
+  if (!it) return refused(d, "unknown id")
+  if (value !== null && Priority.normalize(value) !== value) return refused(d, "bad priority")
+  if (it.priority === value) return accepted(d, "ok", null)
+  var items = replaceItem(d.items, id, function(c) { c.priority = value })
+  return accepted({ items: items, focus: d.focus }, "ok", { type: "setPriority", id: String(id), value: value })
+}
+
+function setSize(doc, id, value) {
+  var d = docOf(doc)
+  var it = Model.findItem(d.items, id)
+  if (!it) return refused(d, "unknown id")
+  if (value !== null && Priority.normalizeSize(value) !== value) return refused(d, "bad size")
+  if (it.horizon !== "short") {
+    if (value !== null) return refused(d, "size is for short-term tasks only")
+    return accepted(d, "ok", null)
+  }
+  var items = replaceItem(d.items, id, function(c) { c.size = value })
+  return accepted({ items: items, focus: d.focus }, "ok", { type: "setSize", id: String(id), value: value })
 }
 
 function setStatus(doc, id, status) {
@@ -231,7 +282,10 @@ function removeItem(doc, id) {
 function reduce(doc, action) {
   var a = action || {}
   switch (a.type) {
-    case "add": return addItem(doc, a.name, a.description, a.id)
+    case "add": return addItem(doc, a.name, a.description, a.id, a.stream, a.horizon)
+    case "move": return move(doc, a.id, a.stream)
+    case "setPriority": return setPriority(doc, a.id, a.value)
+    case "setSize": return setSize(doc, a.id, a.value)
     case "setStatus": return setStatus(doc, a.id, a.status)
     case "focus": return setFocus(doc, a.id)
     case "toggleStep": return toggleStep(doc, a.id, a.n)

@@ -22,6 +22,12 @@ function rememberId(idMap, tempId, out) {
   return next
 }
 
+// Translate view state without changing an unmapped temporary id.
+function realId(id, idMap) {
+  var map = idMap || {}
+  return map[id] === undefined ? String(id) : map[id]
+}
+
 function withRealId(action, idMap) {
   var map = idMap || {}
   if (!action || action.id === undefined || map[action.id] === undefined) return action

@@ -5,9 +5,48 @@
 // transients and the IPC `dump()` view.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lib, G, NOW, item, idle, onTask } from "./helpers.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { lib, G, NOW, item, idle, onTask, here } from "./helpers.mjs";
 
 const View = lib("View.js");
+const Store = lib("Store.js");
+const boardFixture = (name) => Store.fromCli(fs.readFileSync(path.join(here, "fixtures", name), "utf8"));
+
+test("dump.open carries eight metadata keys, zero and copied labels in unchanged list order", () => {
+  const doc = boardFixture("provisional/board-streams.json");
+  const dump = View.dumpView({ ...doc, sessionDone: { 8: true } });
+  assert.deepEqual(dump.open.map((it) => it.id), ["3", "1", "2", "4", "5", "6", "7"]);
+  for (const entry of dump.open) {
+    assert.deepEqual(Object.keys(entry), ["id", "title", "status", "stream", "horizon", "labels", "priority", "size"]);
+    const source = doc.items.find((it) => it.id === entry.id);
+    assert.deepEqual(entry, { id: source.id, title: source.name, status: source.status, stream: source.stream, horizon: source.horizon, labels: source.labels, priority: source.priority, size: source.size });
+    assert.notEqual(entry.labels, source.labels);
+  }
+  assert.equal(dump.open.find((it) => it.id === "2").priority, 0);
+  assert.deepEqual(dump.done, [{ id: "8", title: "Shipped the invoice export" }]);
+  dump.open[0].labels.push("new");
+  assert.deepEqual(doc.items[2].labels, ["waiting"]);
+});
+
+test("dump.open flags only missing or archived homes and retains the task's own stream", () => {
+  const doc = boardFixture("consumer/board-archived-home.json");
+  const dump = View.dumpView(doc);
+  const orphans = dump.open.filter((it) => it.orphan === true);
+  assert.deepEqual(orphans.map((it) => [it.id, it.stream]), [["4", "work: old"], ["7", "work: zzz"]]);
+  assert.equal(dump.open.filter((it) => Object.hasOwn(it, "orphan")).length, 2);
+  assert.equal(View.dumpView({ ...doc, streams: null }).open.every((it) => it.orphan === true), true);
+});
+
+test("older cli and json dump.open retain today's three keys; done is unchanged", () => {
+  const doc = boardFixture("consumer/board-old-cli.json");
+  for (const hasStreams of [false, undefined]) {
+    const dump = View.dumpView({ ...doc, hasStreams, sessionDone: { 5: true } });
+    assert.deepEqual(dump.open, [{ id: "3", title: "Wire the webhook", status: "doing" }]);
+    dump.open.forEach((it) => assert.deepEqual(Object.keys(it), ["id", "title", "status"]));
+    assert.deepEqual(dump.done, [{ id: "5", title: "Closed one" }]);
+  }
+});
 
 // ------------------------------------------------------------- session
 test("tickDone remembers an open row's pre-tick status and warns when the pomodoro sits on it (UI-14, UX §6.4)", () => {

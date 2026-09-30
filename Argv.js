@@ -31,6 +31,8 @@ function forAction(cliPath, action) {
     case "read": return todocli(cliPath, ["board"], [])
     case "add": {
       var args = ["add"]
+      if (action.stream !== undefined && action.stream !== null && String(action.stream) !== "") args.push("--stream=" + String(action.stream))
+      if (action.horizon !== undefined && action.horizon !== null && String(action.horizon) !== "") args.push("--horizon=" + String(action.horizon))
       if (action.description !== undefined && action.description !== null && String(action.description) !== "") args.push("--description=" + String(action.description))
       return todocli(cliPath, args, [String(action.name)])
     }
@@ -43,6 +45,9 @@ function forAction(cliPath, action) {
       return String(action.id) === "clear"
         ? todocli(cliPath, ["focus", "--clear"], [])
         : todocli(cliPath, ["focus", "--task", String(action.id)], [])
+    case "move": return todocli(cliPath, ["move", String(action.id), String(action.stream)], [])
+    case "setPriority": return todocli(cliPath, ["priority", String(action.id), action.value === null ? "none" : String(action.value)], [])
+    case "setSize": return todocli(cliPath, ["size", String(action.id), action.value === null ? "none" : String(action.value)], [])
     case "toggleStep": return todocli(cliPath, ["step", String(action.id), String(action.n)], [])
     case "remove": return todocli(cliPath, ["rm", String(action.id)], [])
     case "syncNow": return todocli(cliPath, ["sync", "all"], [])

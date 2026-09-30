@@ -1,4 +1,5 @@
 .pragma library
+.import "Priority.js" as Priority
 
 // The item model and the vocabulary every other library shares: the glyphs,
 // the settings and their coercion, text and time formatting, the item
@@ -9,7 +10,8 @@
 // no QML: the file runs under node --test as well (PLAN §9.4).
 //
 // Item model (both backends): { id: string, uid, name, description, status,
-//   plan: [{text, done}], notes: [{at, text}], due, author }.
+//   plan: [{text, done}], notes: [{at, text}], due, author,
+//   stream, labels: [string], horizon, priority, size }.
 //
 // The other libraries: Store.js (document shapes, cli mapping, the reducer),
 // Errors.js (the UX §7 error kinds and copy), View.js (view decisions and
@@ -122,6 +124,27 @@ function normalizeNotes(notes) {
   return out
 }
 
+// Catalogue order is producer-owned; malformed entries never throw.
+function normalizeStreams(list) {
+  if (!Array.isArray(list)) return []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var entry = list[i]
+    if (!entry || typeof entry !== "object") continue
+    var uid = squish(entry.uid)
+    var key = squish(entry.key)
+    if (uid === "" || key === "") continue
+    out.push({
+      uid: uid, key: key, group: strOrNull(entry.group), name: str(entry.name),
+      position: typeof entry.position === "number" && isFinite(entry.position) ? entry.position : 0,
+      system: entry.system === true, createdAt: str(entry.createdAt),
+      archivedAt: typeof entry.archivedAt === "string" && entry.archivedAt !== "" ? entry.archivedAt : null,
+      open: Number.isInteger(entry.open) && entry.open >= 0 ? entry.open : 0
+    })
+  }
+  return out
+}
+
 function normalize(item) {
   if (!item || typeof item !== "object") return null
   var name = squish(item.name)
@@ -137,7 +160,12 @@ function normalize(item) {
     plan: normalizePlan(item.plan),
     notes: normalizeNotes(item.notes),
     due: strOrNull(item.due),
-    author: strOrNull(item.author)
+    author: strOrNull(item.author),
+    stream: strOrNull(squish(item.stream)),
+    labels: Array.isArray(item.labels) ? item.labels.filter(function(v) { return typeof v === "string" }) : [],
+    horizon: Priority.HORIZONS.indexOf(item.horizon) !== -1 ? item.horizon : "short",
+    priority: Priority.normalize(item.priority),
+    size: Priority.normalizeSize(item.size)
   }
 }
 
@@ -146,7 +174,9 @@ function copyItem(item) {
     id: item.id, uid: item.uid, name: item.name, description: item.description, status: item.status,
     plan: item.plan.map(function(s) { return { text: s.text, done: s.done } }),
     notes: item.notes.map(function(n) { return { at: n.at, text: n.text } }),
-    due: item.due, author: item.author
+    due: item.due, author: item.author,
+    stream: item.stream, labels: item.labels.slice(), horizon: item.horizon,
+    priority: item.priority, size: item.size
   }
 }
 

@@ -1,10 +1,69 @@
 // Queue.js: the cli ordering rules, rollback rebase and temporary ids (A34).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lib, item } from "./helpers.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { lib, item, here } from "./helpers.mjs";
 
 const Store = lib("Store.js");
 const Queue = lib("Queue.js");
+const Model = lib("Model.js");
+const Argv = lib("Argv.js");
+const Errors = lib("Errors.js");
+const fixture = (name) => fs.readFileSync(path.join(here, "fixtures", name), "utf8");
+const get = (doc, id) => Model.findItem(doc.items, id);
+
+test("realId translates mapped view ids and leaves unmapped ids as strings", () => {
+  assert.equal(Queue.realId("t1", { t1: "21" }), "21");
+  assert.equal(Queue.realId("t2", { t1: "21" }), "t2");
+  assert.equal(Queue.realId(3, null), "3");
+  assert.equal(Queue.realId("t1"), "t1");
+});
+
+test("UI-30: failed setPriority followed by queued setStatus keeps zero and every field", () => {
+  const base = Store.fromCli(fixture("provisional/board-streams.json"));
+  const before = { items: base.items, focus: base.focus };
+  const w1 = Store.reduce(before, { type: "setPriority", id: "2", value: 75 });
+  const w2 = Store.reduce(w1.doc, { type: "setStatus", id: "2", status: "doing" });
+  const failure = JSON.parse(fixture("consumer/write-failed-refused.json"));
+  assert.equal(Errors.classifyExit(failure.code, failure.error, false).kind, "failed");
+  const r = Queue.rebase(before, [{ action: w2.action, before: w1.doc, tempId: null }]);
+  assert.deepEqual(get(r.doc, "2"), { ...get(base, "2"), status: "doing" });
+  assert.equal(get(r.doc, "2").priority, 0);
+  assert.deepEqual([get(r.doc, "2").stream, get(r.doc, "2").labels, get(r.doc, "2").horizon, get(r.doc, "2").size], ["inbox", ["lease"], "mid", null]);
+  assert.notEqual(get(r.doc, "2").labels, get(base, "2").labels);
+  assert.deepEqual(r.entries[0].before, before);
+  assert.deepEqual(w1.doc.items[1].priority, 75, "input snapshot remains optimistic");
+  assert.deepEqual(base.streams, JSON.parse(fixture("provisional/board-streams.json")).streams);
+});
+
+test("AC-ST.41: failed move rebases an add and its priority under the temporary id", () => {
+  const base = Store.fromCli(fixture("provisional/board-streams.json"));
+  const before = { items: base.items, focus: base.focus };
+  const w1 = Store.reduce(before, { type: "move", id: "3", stream: "work: leadtone" });
+  const w2 = Store.reduce(w1.doc, { type: "add", name: "Book review", stream: "work: leadtone", id: "t1" });
+  const w3 = Store.reduce(w2.doc, { type: "setPriority", id: "t1", value: 75 });
+  const entries = [
+    { action: w2.action, tempId: "t1", before: w1.doc, done: null },
+    { action: w3.action, tempId: null, before: w2.doc, done: null },
+  ];
+  const r = Queue.rebase(before, entries);
+  assert.deepEqual(get(r.doc, "3"), get(base, "3"));
+  assert.deepEqual([get(r.doc, "3").stream, get(r.doc, "3").labels, get(r.doc, "3").horizon, get(r.doc, "3").priority, get(r.doc, "3").size], ["work: tellkin", ["waiting"], "short", 75, "XL"]);
+  assert.deepEqual(get(r.doc, "t1"), get(w3.doc, "t1"));
+  assert.equal(get(r.doc, "t1").stream, "work: leadtone");
+  assert.equal(get(r.doc, "t1").priority, 75);
+  assert.equal(r.entries.length, 2);
+  assert.deepEqual(r.entries[0].before, before);
+  assert.equal(get(r.entries[1].before, "t1").priority, null);
+  assert.equal(get(entries[0].before, "3").stream, "work: leadtone");
+  const reply = { ...JSON.parse(fixture("provisional/write-priority.json")), id: 21 };
+  const map = Queue.rememberId({}, "t1", JSON.stringify(reply));
+  assert.equal(Queue.realId("t1", map), "21");
+  const cliPath = path.join(here, "fakebin/todocli");
+  assert.deepEqual(Argv.forAction(cliPath, Queue.withRealId(w3.action, map)), [cliPath, "--source", "omarchy", "--json", "priority", "21", "75"]);
+  assert.deepEqual(Queue.withRealId({ type: "setSize", id: "t1", value: "M" }, map), { type: "setSize", id: "21", value: "M" });
+});
 
 test("rememberId and withRealId map an optimistic add's temporary id to the id todocli replied with (A34)", () => {
   const map = Queue.rememberId({}, "tabc", '{"id":42,"title":"x"}\n');

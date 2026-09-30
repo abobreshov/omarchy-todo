@@ -246,6 +246,7 @@ Panel {
     return JSON.stringify(View.dumpView({
       backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
       items: items, focus: focusModel, sessionDone: liveSessionDone, banner: banner === "" ? null : banner,
+      hasStreams: store.hasStreams, streams: store.streams,
       footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
     }))
   }

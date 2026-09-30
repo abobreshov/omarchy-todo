@@ -30,7 +30,7 @@ export const G = {
 
 export const NOW = Date.parse("2026-09-29T09:15:00.000Z");
 
-export const item = (id, name, status, extra) => Object.assign({ id: String(id), uid: null, name, description: "", status, plan: [], notes: [], due: null, author: null }, extra || {});
+export const item = (id, name, status, extra) => Object.assign({ id: String(id), uid: null, name, description: "", status, plan: [], notes: [], due: null, author: null, stream: null, labels: [], horizon: "short", priority: null, size: null }, extra || {});
 
 // The reader's view of an idle pomodoro (Model.idleView) and of one running
 // on a task, as PomodoroLink.view hands them to the views.
