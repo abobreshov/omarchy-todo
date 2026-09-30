@@ -11,7 +11,12 @@ import "Argv.js" as Argv
 // reads as E4 (`missing`). One read Process; writes go through a FIFO, one
 // at a time, with one read after each; `sync all` runs single-flight
 // outside that FIFO. Writes are optimistic and reverted on failure, never
-// retried. Reads happen on load, on the change signal (a directory watch on
+// retried; a failed write is undone by rebasing the writes still queued
+// after it (Store.rebase), so their optimistic changes stay. A read paints
+// only when no write finished since it began (Store.readApplies, the
+// write generation), so a read that started before a commit never shows
+// the pre-write board over the optimistic list. Reads happen on load, on
+// the change signal (a directory watch on
 // the directory of the stamp the board document names, `stamp`, plus the
 // `refresh()` push), on `r`, on panel open,
 // every 30 s in an error state and every smallest enabled intervalSec while
@@ -38,6 +43,10 @@ TodoStore {
   property var pending: null
   // Temporary ids of optimistic adds -> the id todocli replied with (A34).
   property var idMap: ({})
+  // The write generation: one more per finished write; a read remembers
+  // the generation it was spawned under and paints only if it is unchanged.
+  property int writeGen: 0
+  property int readGen: 0
 
   function load() { read() }
   function refresh() { read(); return "ok" }
@@ -46,6 +55,7 @@ TodoStore {
   function read() {
     if (!active) return
     if (readProc.running) { readRequested = true; return }
+    readGen = writeGen
     readProc.run(Argv.forAction(cliPath, { type: "read" }))
   }
 
@@ -56,9 +66,10 @@ TodoStore {
     if (e) {
       error = e
       stale = loaded
-    } else if (!pending && queue.length === 0) {
-      // A read that lands while writes are queued is superseded by the read
-      // after the last of them, so it never undoes an optimistic change.
+    } else if (Store.readApplies(readGen, writeGen, pending, queue.length)) {
+      // A read that lands while writes are queued, or that began before a
+      // write finished, is superseded by the read after the last of them,
+      // so it never undoes an optimistic change.
       items = doc.items
       focus = doc.focus
       sync = doc.sync
@@ -85,7 +96,8 @@ TodoStore {
 
   // ---- mutations (optimistic; a reply means accepted, not committed).
   //      The action is applied to the local doc at once and queued for the
-  //      write FIFO with the doc to restore should the write fail.
+  //      write FIFO with the doc from before it (`before`), the base a
+  //      failure rebases the rest of the queue onto.
   function perform(action, done) {
     if (error) return Errors.unavailable(error)
     var r = Store.reduce({ items: items, focus: focus }, action)
@@ -93,7 +105,7 @@ TodoStore {
     var prev = { items: items, focus: focus }
     items = r.doc.items
     focus = r.doc.focus
-    queue.push({ action: r.action, tempId: r.item ? r.item.id : null, revert: function() { items = prev.items; focus = prev.focus }, done: done })
+    queue.push({ action: r.action, tempId: r.item ? r.item.id : null, before: prev, done: done })
     pump()
     return r.reply
   }
@@ -109,9 +121,15 @@ TodoStore {
     var e = Errors.classifyExit(code, err, spawnFailed)
     var job = pending
     pending = null
+    writeGen += 1
     if (!job) return
     if (e) {
-      job.revert()
+      // Undo this write alone: the doc from before it with the still-queued
+      // writes applied again, each rebased (Store.rebase).
+      var r = Store.rebase(job.before, queue)
+      queue = r.entries
+      items = r.doc.items
+      focus = r.doc.focus
       failed(e)
     } else if (job.tempId) idMap = Store.rememberId(idMap, job.tempId, out)
     if (job.done) job.done(e)

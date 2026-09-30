@@ -205,11 +205,13 @@ function clearFocusIf(focus, id) {
   return { text: focus.text, taskId: focus.taskId === String(id) ? null : focus.taskId }
 }
 
-function addItem(doc, name, description) {
+// `id` is given only by `rebase`, replaying an optimistic add under its own
+// temporary id; a fresh add mints one.
+function addItem(doc, name, description, id) {
   var d = docOf(doc)
   var cleanName = Model.squish(name)
   if (cleanName === "") return refused(d, "empty")
-  var item = Model.normalize({ id: Model.makeId(), name: cleanName, description: description, status: "todo" })
+  var item = Model.normalize({ id: id, name: cleanName, description: description, status: "todo" })
   return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, { type: "add", name: cleanName, description: item.description }, item)
 }
 
@@ -256,7 +258,7 @@ function removeItem(doc, id) {
 function reduce(doc, action) {
   var a = action || {}
   switch (a.type) {
-    case "add": return addItem(doc, a.name, a.description)
+    case "add": return addItem(doc, a.name, a.description, a.id)
     case "setStatus": return setStatus(doc, a.id, a.status)
     case "focus": return setFocus(doc, a.id)
     case "toggleStep": return toggleStep(doc, a.id, a.n)
@@ -269,4 +271,48 @@ function reduce(doc, action) {
 // whatever the id.
 function ipcReply(action, reply) {
   return action.type === "remove" && reply === "unknown id" ? "ok" : reply
+}
+
+// ---------------------------------------------------------------- the cli
+// store's ordering rules (A34): pure, so they are tested under Node.
+
+// A read's document may be painted only when nothing can have moved the
+// store since the read began: no write finished between its start and its
+// return (`startedGen` is the store's write generation when the read was
+// spawned, `writeGen` the generation now), none is in flight and none is
+// queued. Otherwise the read after the last write supersedes it, so a read
+// that began before a commit never paints the pre-write board over the
+// optimistic list, not even for one cycle.
+function readApplies(startedGen, writeGen, pending, queued) {
+  return startedGen === writeGen && !pending && queued === 0
+}
+
+// A failed optimistic write is undone without erasing the optimistic
+// writes queued after it: the doc from before the failed write, with every
+// still-queued action applied again in order, and each queued entry rebased
+// onto the doc before it, so a later failure reverts only its own change.
+// An add replays under its own temporary id (the row and the id map stay
+// valid); an action the rebased doc refuses is skipped, as its own write is
+// about to be refused too. Returns the doc to show and the rebased entries.
+function rebase(before, entries) {
+  var d = docOf(before)
+  var out = []
+  var list = entries || []
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i] || {}
+    var next = {}
+    for (var k in e) next[k] = e[k]
+    next.before = d
+    var action = e.action
+    if (action && action.type === "add" && e.tempId) {
+      var withId = {}
+      for (var f in action) withId[f] = action[f]
+      withId.id = String(e.tempId)
+      action = withId
+    }
+    var r = reduce(d, action)
+    if (r.ok) d = r.doc
+    out.push(next)
+  }
+  return { doc: d, entries: out }
 }

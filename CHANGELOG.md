@@ -83,6 +83,16 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
 
 ### Fixed
 
+- In cli mode a read that began before a write committed can no longer
+  paint the pre-write board over the optimistic list for one cycle: the
+  store keeps a write generation and paints a read only when no write
+  finished since the read was spawned (`Store.readApplies`); the read after
+  the last write supersedes it.
+- A failed optimistic write no longer erases the optimistic writes queued
+  after it: instead of restoring a whole snapshot, the store rebases the
+  still-queued writes onto the doc from before the failed one
+  (`Store.rebase`), so only the failed change disappears and a later
+  failure reverts only its own.
 - A failed `R` sync no longer puts the panel into an error state for up to
   30 s: the store reads the `kind` of todocli's `--json` envelope and shows
   a footer transient (`Sync already running.`, `Sync held — …`, `Sync

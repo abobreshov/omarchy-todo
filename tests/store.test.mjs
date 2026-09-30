@@ -288,3 +288,48 @@ test("fromCli carries the stamp the document names; stampDir is its directory", 
   assert.equal(Store.stampDir("changed"), "", "a bare name has no directory to watch");
   assert.equal(Store.stampDir("/changed"), "", "the root is never watched");
 });
+
+// ------------------------------------------------------- cli ordering rules
+test("readApplies: a read paints only when no write finished since it began and none is in flight or queued (A34)", () => {
+  assert.equal(Store.readApplies(3, 3, null, 0), true);
+  assert.equal(Store.readApplies(2, 3, null, 0), false, "a write finished while the read ran: it may hold the pre-write board");
+  assert.equal(Store.readApplies(3, 3, { action: {} }, 0), false, "a write in flight");
+  assert.equal(Store.readApplies(3, 3, null, 2), false, "writes queued");
+});
+
+test("rebase after a failed write keeps the later queued optimistic writes and rebases each of them", () => {
+  const base = { items: [item(1, "One", "todo")], focus: { text: "", taskId: null } };
+  // W1 (an add, fails) was applied first, then W2 (an add) and W3 (start #1)
+  // on top of it; the queue still holds W2 and W3 with W1's optimistic
+  // doc as their `before`.
+  const w1 = Store.reduce(base, { type: "add", name: "Fails" });
+  const w2 = Store.reduce(w1.doc, { type: "add", name: "Queued add" });
+  const w3 = Store.reduce(w2.doc, { type: "setStatus", id: "1", status: "doing" });
+  const queue = [
+    { action: w2.action, tempId: w2.item.id, before: w1.doc, done: null },
+    { action: w3.action, tempId: null, before: w2.doc, done: null },
+  ];
+  const r = Store.rebase(base, queue);
+  assert.deepEqual(r.doc.items.map((t) => [t.id, t.name, t.status]), [["1", "One", "doing"], [w2.item.id, "Queued add", "todo"]], "W1 gone, W2 under its own temporary id, W3 applied");
+  assert.equal(r.entries.length, 2);
+  assert.deepEqual(r.entries[0].before, base, "W2 is rebased onto the doc without W1");
+  assert.deepEqual(r.entries[1].before.items.map((t) => t.name), ["One", "Queued add"], "W3 onto the doc with W2");
+  assert.equal(r.entries[0].done, null, "the other fields ride along");
+  assert.deepEqual(queue[0].before, w1.doc, "the input entries are untouched");
+  // A later failure then reverts only its own change: W2 fails with W3 queued.
+  const again = Store.rebase(r.entries[0].before, [r.entries[1]]);
+  assert.deepEqual(again.doc.items.map((t) => [t.id, t.status]), [["1", "doing"]], "W1 and W2 gone, W3 kept");
+  // An action the rebased doc refuses (a step on the failed add) is skipped.
+  const dependent = [{ action: { type: "setStatus", id: w1.item.id, status: "done" }, tempId: null, before: w1.doc, done: null }];
+  assert.deepEqual(Store.rebase(base, dependent).doc, { items: base.items, focus: base.focus });
+  assert.deepEqual(Store.rebase(base, null).doc, { items: base.items, focus: base.focus }, "nothing queued: the doc from before");
+  assert.deepEqual(Store.rebase(base, [null]).entries, [{ before: { items: base.items, focus: base.focus } }], "a hole in the queue is carried, not applied");
+});
+
+test("reduce: an add with an id keeps it (the replay), without one mints a temporary id", () => {
+  const withId = Store.reduce({ items: [], focus: null }, { type: "add", name: "Kept", id: "tkeep" });
+  assert.equal(withId.item.id, "tkeep");
+  assert.equal(withId.action.id, undefined, "the action to persist never carries the temporary id");
+  const minted = Store.reduce({ items: [], focus: null }, { type: "add", name: "Minted" });
+  assert.match(minted.item.id, /^t[0-9a-z]+$/);
+});
