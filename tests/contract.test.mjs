@@ -51,7 +51,7 @@ const PINS = {
   "sync-all.json": "259f2bb2b31b85fc877ba005dcfe211719f7636c935f54ff0d6fccf7b0e0ab74",
   "write-add.json": "b040aa1f72f0818982eb5463f5fded4a4937ffad8aa5bfd1ac37deb6999b32e8",
   "write-done.json": "624a60cdf8eaf62ea84fb6dc6322b23bc4176ec5b77421bc6c533b6e1e26dad7",
-  "write-focus-clear.json": "ede8edcf708eeaa2afcc66f7cc6d8b891ed03472399d50621273ca9a5119c3ec",
+  "write-focus-clear.json": "3368ea498e9490c52f7abc4589f078bdab156aa1c313e44706a2bbe4a005b39f",
   "write-focus-task.json": "2133d780e1b89c33588ad5e8299db29a9e32458e4927564ad0e801f77fcb3ab4",
   "write-reopen.json": "799b7b04d6ff8c3f62c7c7427c3ad454df9dbfa32506a76ad933a1b4d2de1a37",
   "write-rm.json": "a461205368529a353658c166f463194bbd3cc6bbc28d115bad03644e988c1e80",
@@ -89,7 +89,7 @@ test("the goldens are the shapes this panel parses: the board, every write reply
   }
   assert.equal(JSON.parse(golden("write-rm.json")).deleted, true);
   assert.deepEqual(JSON.parse(golden("write-focus-task.json")), { focus: "Ship the invoice-export slice", focus_task: 3 });
-  assert.deepEqual(JSON.parse(golden("write-focus-clear.json")), { focus: "Ship the invoice-export slice", focus_task: null });
+  assert.deepEqual(JSON.parse(golden("write-focus-clear.json")), { focus: null, focus_task: null }, "--clear clears the statement and the link (todocli 07988ed)");
   assert.equal(Queue.rememberId({}, "tmp", golden("write-focus-task.json")).tmp, undefined, "a focus reply names no task to map");
   const sync = JSON.parse(golden("sync-all.json"));
   assert.equal(typeof sync.basecamp, "object");
