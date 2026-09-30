@@ -1,6 +1,5 @@
 .pragma library
 .import "Model.js" as Model
-.import "Errors.js" as Errors
 
 // The view decisions and the copy (UX §3.1, §4.2, §4.4, §4.5, §4.7, §10.3):
 // the list's order and the session's done rows, the focus line, the detail

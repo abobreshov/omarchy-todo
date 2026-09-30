@@ -280,6 +280,15 @@ vendored and pinned the same way in `tests/pomodoro.test.mjs`, which reads every
 shape through `pomodoroView`; and `tests/qml-js-loader.mjs` is the one loader
 both plugins' unit tests use (the pomodoro vendors a pinned copy).
 
+`tests/fixtures/provisional/` holds the S9 documents copied byte for byte from
+`docs/streams/CONTRACT-S9.md` (the board with streams, `show`, the five new
+writes); the panel codes against them until the crate regenerates the contract
+goldens, and package P5 deletes the directory. `tests/fixtures/consumer/` is
+permanent: adversarial inputs (an older CLI document, an archived home, ordering
+ties, an empty stream, a refused write) with their pinned expected orders in
+`expected.json`; `tests/fixtures-schema.test.mjs` asserts both directories'
+shapes and key order against the contract.
+
 `tests/qml/run.sh` runs `tests/qml/tst_hover.qml` under `qmltestrunner` on the
 offscreen platform: the real `TaskRow.qml` against the installed shell's
 `Ui`/`Commons`, with the Quickshell types stubbed under `tests/qml/imports`

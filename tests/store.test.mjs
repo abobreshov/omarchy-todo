@@ -276,9 +276,6 @@ test("fromCli carries the stamp the document names; stampDir is its directory", 
   assert.equal(Store.stampDir("/changed"), "", "the root is never watched");
 });
 
-// ------------------------------------------------------- cli ordering rules
-
-
 test("reduce: an add with an id keeps it (the replay), without one mints a temporary id", () => {
   const withId = Store.reduce({ items: [], focus: null }, { type: "add", name: "Kept", id: "tkeep" });
   assert.equal(withId.item.id, "tkeep");

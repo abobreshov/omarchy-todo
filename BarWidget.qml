@@ -4,7 +4,6 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "Store.js" as Store
-import "View.js" as View
 import "Chrome.js" as Chrome
 import "Pomodoro.js" as Pomodoro
 

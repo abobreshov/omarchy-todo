@@ -100,4 +100,3 @@ function footer(sync, now, opts) {
     return { glyph: Model.G.sync, text: "todocli · not synced yet · R sync now", urgent: false, tooltip: tip, action: "syncNow" }
   return { glyph: Model.G.sync, text: "todocli · synced " + Model.ago(oldestOk, now), urgent: false, tooltip: tip, action: null }
 }
-

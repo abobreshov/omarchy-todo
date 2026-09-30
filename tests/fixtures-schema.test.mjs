@@ -1,5 +1,5 @@
 // CONTRACT-S9 revision 3, §12.3: provisional producer bytes and permanent
-// consumer inputs. Future stream behavior is pinned as data, not implemented.
+// consumer inputs. Future stream behaviour is pinned as data, not implemented.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
