@@ -9,8 +9,8 @@
 //   { "version": 2, "focus": { "text": "", "taskId": null },
 //     "todos": [ { "id", "name", "description", "status", "plan", "notes" } ] }
 // The cli store reads todocli's `board --json` document (PLAN §3.7) through
-// `fromCli` and maps an optimistic add's temporary id to the id todocli
-// replied with (`rememberId`, `withRealId`).
+// `fromCli`; the write FIFO's ordering rules and optimistic id map
+// (`rememberId`, `withRealId`, `readApplies`, `rebase`) live in Queue.js.
 
 // The stores' own transients (UX §4.5, §7 E14); the cli store's sync
 // transients are Errors.classifySync's.
@@ -143,33 +143,6 @@ function stampDir(stamp) {
   return cut <= 0 ? "" : s.slice(0, cut + 1)
 }
 
-// The reply of a write is the affected task as one JSON object (§3.6): an
-// optimistic add's temporary id maps to its `id`, so a key pressed on the
-// new row before the re-read still names the right task (A34).
-function rememberId(idMap, tempId, out) {
-  var map = idMap || {}
-  var data
-  try {
-    data = JSON.parse(String(out))
-  } catch (e) {
-    return map
-  }
-  if (!data || typeof data !== "object" || Array.isArray(data) || data.id === undefined || data.id === null) return map
-  var next = {}
-  for (var k in map) next[k] = map[k]
-  next[String(tempId)] = String(data.id)
-  return next
-}
-
-function withRealId(action, idMap) {
-  var map = idMap || {}
-  if (!action || action.id === undefined || map[action.id] === undefined) return action
-  var out = {}
-  for (var k in action) out[k] = action[k]
-  out.id = map[action.id]
-  return out
-}
-
 // ---------------------------------------------------------------- mutations
 // One action vocabulary, shared by the keys (Keys.js emits it), the argv
 // (Argv.forAction maps it to a todocli command) and both stores (they apply
@@ -205,7 +178,7 @@ function clearFocusIf(focus, id) {
   return { text: focus.text, taskId: focus.taskId === String(id) ? null : focus.taskId }
 }
 
-// `id` is given only by `rebase`, replaying an optimistic add under its own
+// `id` is given only by `Queue.rebase`, replaying an optimistic add under its own
 // temporary id; a fresh add mints one.
 function addItem(doc, name, description, id) {
   var d = docOf(doc)
@@ -271,48 +244,4 @@ function reduce(doc, action) {
 // whatever the id.
 function ipcReply(action, reply) {
   return action.type === "remove" && reply === "unknown id" ? "ok" : reply
-}
-
-// ---------------------------------------------------------------- the cli
-// store's ordering rules (A34): pure, so they are tested under Node.
-
-// A read's document may be painted only when nothing can have moved the
-// store since the read began: no write finished between its start and its
-// return (`startedGen` is the store's write generation when the read was
-// spawned, `writeGen` the generation now), none is in flight and none is
-// queued. Otherwise the read after the last write supersedes it, so a read
-// that began before a commit never paints the pre-write board over the
-// optimistic list, not even for one cycle.
-function readApplies(startedGen, writeGen, pending, queued) {
-  return startedGen === writeGen && !pending && queued === 0
-}
-
-// A failed optimistic write is undone without erasing the optimistic
-// writes queued after it: the doc from before the failed write, with every
-// still-queued action applied again in order, and each queued entry rebased
-// onto the doc before it, so a later failure reverts only its own change.
-// An add replays under its own temporary id (the row and the id map stay
-// valid); an action the rebased doc refuses is skipped, as its own write is
-// about to be refused too. Returns the doc to show and the rebased entries.
-function rebase(before, entries) {
-  var d = docOf(before)
-  var out = []
-  var list = entries || []
-  for (var i = 0; i < list.length; i++) {
-    var e = list[i] || {}
-    var next = {}
-    for (var k in e) next[k] = e[k]
-    next.before = d
-    var action = e.action
-    if (action && action.type === "add" && e.tempId) {
-      var withId = {}
-      for (var f in action) withId[f] = action[f]
-      withId.id = String(e.tempId)
-      action = withId
-    }
-    var r = reduce(d, action)
-    if (r.ok) d = r.doc
-    out.push(next)
-  }
-  return { doc: d, entries: out }
 }

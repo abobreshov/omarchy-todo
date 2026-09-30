@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "Store.js" as Store
+import "Queue.js" as Queue
 import "Errors.js" as Errors
 import "Argv.js" as Argv
 
@@ -12,8 +13,8 @@ import "Argv.js" as Argv
 // at a time, with one read after each; `sync all` runs single-flight
 // outside that FIFO. Writes are optimistic and reverted on failure, never
 // retried; a failed write is undone by rebasing the writes still queued
-// after it (Store.rebase), so their optimistic changes stay. A read paints
-// only when no write finished since it began (Store.readApplies, the
+// after it (Queue.rebase), so their optimistic changes stay. A read paints
+// only when no write finished since it began (Queue.readApplies, the
 // write generation), so a read that started before a commit never shows
 // the pre-write board over the optimistic list. Reads happen on load, on
 // the change signal (a directory watch on
@@ -66,7 +67,7 @@ TodoStore {
     if (e) {
       error = e
       stale = loaded
-    } else if (Store.readApplies(readGen, writeGen, pending, queue.length)) {
+    } else if (Queue.readApplies(readGen, writeGen, pending, queue.length)) {
       // A read that lands while writes are queued, or that began before a
       // write finished, is superseded by the read after the last of them,
       // so it never undoes an optimistic change.
@@ -114,7 +115,7 @@ TodoStore {
   function pump() {
     if (pending || writeProc.running || queue.length === 0) return
     pending = queue.shift()
-    writeProc.run(Argv.forAction(cliPath, Store.withRealId(pending.action, idMap)))
+    writeProc.run(Argv.forAction(cliPath, Queue.withRealId(pending.action, idMap)))
   }
 
   function finishWrite(code, spawnFailed, out, err) {
@@ -125,13 +126,13 @@ TodoStore {
     if (!job) return
     if (e) {
       // Undo this write alone: the doc from before it with the still-queued
-      // writes applied again, each rebased (Store.rebase).
-      var r = Store.rebase(job.before, queue)
+      // writes applied again, each rebased (Queue.rebase).
+      var r = Queue.rebase(job.before, queue)
       queue = r.entries
       items = r.doc.items
       focus = r.doc.focus
       failed(e)
-    } else if (job.tempId) idMap = Store.rememberId(idMap, job.tempId, out)
+    } else if (job.tempId) idMap = Queue.rememberId(idMap, job.tempId, out)
     if (job.done) job.done(e)
   }
 

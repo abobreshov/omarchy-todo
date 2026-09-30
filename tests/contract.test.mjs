@@ -19,6 +19,7 @@ import { spawnSync } from "node:child_process";
 import { lib, here } from "./helpers.mjs";
 
 const Store = lib("Store.js");
+const Queue = lib("Queue.js");
 const Errors = lib("Errors.js");
 const Argv = lib("Argv.js");
 const dir = path.join(here, "fixtures", "contract");
@@ -84,12 +85,12 @@ test("the goldens are the shapes this panel parses: the board, every write reply
   for (const verb of ["add", "start", "done", "reopen", "step", "rm"]) {
     const reply = JSON.parse(golden("write-" + verb + ".json"));
     assert.equal(typeof reply.id, "number", verb + " replies the affected task");
-    assert.equal(Store.rememberId({}, "tmp", golden("write-" + verb + ".json")).tmp, String(reply.id));
+    assert.equal(Queue.rememberId({}, "tmp", golden("write-" + verb + ".json")).tmp, String(reply.id));
   }
   assert.equal(JSON.parse(golden("write-rm.json")).deleted, true);
   assert.deepEqual(JSON.parse(golden("write-focus-task.json")), { focus: "Ship the invoice-export slice", focus_task: 3 });
   assert.deepEqual(JSON.parse(golden("write-focus-clear.json")), { focus: "Ship the invoice-export slice", focus_task: null });
-  assert.equal(Store.rememberId({}, "tmp", golden("write-focus-task.json")).tmp, undefined, "a focus reply names no task to map");
+  assert.equal(Queue.rememberId({}, "tmp", golden("write-focus-task.json")).tmp, undefined, "a focus reply names no task to map");
   const sync = JSON.parse(golden("sync-all.json"));
   assert.equal(typeof sync.basecamp, "object");
   assert.notEqual(sync.basecamp, null, "basecamp is an object even with the target off");
@@ -170,7 +171,7 @@ test("the real todocli under an isolated environment prints the shapes the golde
   assert.equal(add.code, 0, add.stderr);
   assert.deepEqual(shape(add.stdout), shape(golden("write-add.json")));
   const id = String(JSON.parse(add.stdout).id);
-  assert.equal(Store.rememberId({}, "tmp", add.stdout).tmp, id);
+  assert.equal(Queue.rememberId({}, "tmp", add.stdout).tmp, id);
   for (const [action, name] of [
     [{ type: "setStatus", id, status: "doing" }, "write-start.json"],
     [{ type: "setStatus", id, status: "done" }, "write-done.json"],
