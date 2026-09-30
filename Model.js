@@ -145,6 +145,25 @@ function normalizeStreams(list) {
   return out
 }
 
+// Reusable lookup for rows, dump and move targets. A caller visiting many
+// items can index the catalogue once; homeOf/isOrphan also accept its array.
+function indexStreams(streams) {
+  var homes = Object.create(null)
+  var list = Array.isArray(streams) ? streams : []
+  for (var i = 0; i < list.length; i++) homes[list[i].key] = list[i]
+  return homes
+}
+
+function homeOf(streams, key) {
+  var homes = Array.isArray(streams) ? indexStreams(streams) : streams
+  return homes && Object.prototype.hasOwnProperty.call(homes, key) ? homes[key] : null
+}
+
+function isOrphan(streams, item) {
+  var home = homeOf(streams, item.stream)
+  return item.status !== "done" && (home === null || home.archivedAt !== null)
+}
+
 function normalize(item) {
   if (!item || typeof item !== "object") return null
   var name = squish(item.name)

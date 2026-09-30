@@ -248,6 +248,7 @@ function dumpView(state) {
   var items = s.items || []
   var sessionDone = s.sessionDone || {}
   var sorted = sortForList(items, sessionDone)
+  var homes = Model.indexStreams(s.streams)
   var open = []
   var done = []
   for (var i = 0; i < sorted.length; i++) {
@@ -260,9 +261,7 @@ function dumpView(state) {
         entry.labels = it.labels.slice()
         entry.priority = it.priority
         entry.size = it.size
-        var catalogue = Array.isArray(s.streams) ? s.streams : []
-        var home = catalogue.filter(function(t) { return t.key === it.stream })[0]
-        if (!home || home.archivedAt !== null) entry.orphan = true
+        if (Model.isOrphan(homes, it)) entry.orphan = true
       }
       open.push(entry)
     }

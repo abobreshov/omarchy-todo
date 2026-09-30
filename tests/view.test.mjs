@@ -12,6 +12,7 @@ import { lib, G, NOW, item, idle, onTask, here } from "./helpers.mjs";
 const View = lib("View.js");
 const Store = lib("Store.js");
 const boardFixture = (name) => Store.fromCli(fs.readFileSync(path.join(here, "fixtures", name), "utf8"));
+const expected = JSON.parse(fs.readFileSync(path.join(here, "fixtures/consumer/expected.json"), "utf8"));
 
 test("dump.open carries eight metadata keys, zero and copied labels in unchanged list order", () => {
   const doc = boardFixture("provisional/board-streams.json");
@@ -33,8 +34,10 @@ test("dump.open flags only missing or archived homes and retains the task's own 
   const doc = boardFixture("consumer/board-archived-home.json");
   const dump = View.dumpView(doc);
   const orphans = dump.open.filter((it) => it.orphan === true);
-  assert.deepEqual(orphans.map((it) => [it.id, it.stream]), [["4", "work: old"], ["7", "work: zzz"]]);
-  assert.equal(dump.open.filter((it) => Object.hasOwn(it, "orphan")).length, 2);
+  const oracle = expected["board-archived-home.json"];
+  assert.deepEqual(orphans.map((it) => Number(it.id)), oracle.orphanIds);
+  assert.deepEqual(Object.fromEntries(orphans.map((it) => [it.id, it.stream])), oracle.streams);
+  assert.equal(dump.open.filter((it) => Object.hasOwn(it, "orphan")).length, oracle.orphanIds.length);
   assert.equal(View.dumpView({ ...doc, streams: null }).open.every((it) => it.orphan === true), true);
 });
 
@@ -43,7 +46,7 @@ test("older cli and json dump.open retain today's three keys; done is unchanged"
   for (const hasStreams of [false, undefined]) {
     const dump = View.dumpView({ ...doc, hasStreams, sessionDone: { 5: true } });
     assert.deepEqual(dump.open, [{ id: "3", title: "Wire the webhook", status: "doing" }]);
-    dump.open.forEach((it) => assert.deepEqual(Object.keys(it), ["id", "title", "status"]));
+    dump.open.forEach((it) => assert.deepEqual(Object.keys(it), expected["board-old-cli.json"].dump.openKeys));
     assert.deepEqual(dump.done, [{ id: "5", title: "Closed one" }]);
   }
 });

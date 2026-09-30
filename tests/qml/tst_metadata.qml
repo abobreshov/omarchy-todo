@@ -4,7 +4,16 @@ import "../.." as Todo
 
 // Real CliStore, stubbed Processes/FileViews: no subprocess, config or store I/O.
 Item {
-  Todo.CliStore { id: store }
+  Todo.CliStore {
+    id: store
+    property var readSnapshots: []
+    onItemsChanged: {
+      if (items.length > 0) readSnapshots.push({
+        stream: items[0].stream, hasStreams: hasStreams,
+        home: streams.length > 0 ? streams[0].key : null
+      })
+    }
+  }
 
   TestCase {
     name: "MetadataPlumbing"
@@ -31,6 +40,7 @@ Item {
       store.readGen = 0
       store.writeGen = 0
       store.idMap = {}
+      store.readSnapshots = []
     }
 
     function test_read_applies_catalogue_with_items() {
@@ -64,6 +74,11 @@ Item {
       compare(store.hasStreams, false)
       compare(store.streams.length, 0)
       compare(store.items[0].priority, null)
+      compare(store.readSnapshots, [
+        { stream: "work: tellkin", hasStreams: true, home: "work: tellkin" },
+        { stream: "work: renamed", hasStreams: true, home: "work: renamed" },
+        { stream: null, hasStreams: false, home: null }
+      ])
     }
 
     function test_noops_skip_document_and_queue() {
@@ -72,7 +87,7 @@ Item {
       var focus = store.focus
       var queue = store.queue
       var callbacks = 0
-      var done = function() { callbacks++ }
+      var done = function(error) { compare(error, null); callbacks++ }
       compare(store.perform({ type: "setPriority", id: "3", value: 0 }, done), "ok")
       compare(store.perform({ type: "setSize", id: "3", value: null }, done), "ok")
       compare(store.perform({ type: "move", id: "3", stream: "work: tellkin" }, done), "ok")
@@ -82,8 +97,43 @@ Item {
       compare(store.queue.length, 0)
       compare(store.pending, null)
       compare(callbacks, 0)
-      compare(store.perform({ type: "setSize", id: "3", value: "M" }), "size is for short-term tasks only")
+      tryVerify(function() { return callbacks === 3 })
+      compare(store.perform({ type: "setSize", id: "3", value: "M" }, done), "size is for short-term tasks only")
+      wait(0)
+      compare(callbacks, 3)
       compare(store.queue.length, 0)
+    }
+
+    function test_same_short_size_calls_done_without_a_write() {
+      store.finishRead(0, false, board("work: tellkin", 0, "short", "M"), "")
+      var items = store.items
+      var callbacks = 0
+      compare(store.perform({ type: "setSize", id: "3", value: "M" }, function(error) {
+        compare(error, null)
+        callbacks++
+      }), "ok")
+      compare(store.items, items)
+      compare(store.queue.length, 0)
+      compare(store.pending, null)
+      tryVerify(function() { return callbacks === 1 })
+      compare(store.perform({ type: "setSize", id: "3", value: "M" }), "ok")
+    }
+
+    function test_bad_move_keys_never_queue_or_call_done() {
+      store.finishRead(0, false, board("work: tellkin", 0, "short", "M"), "")
+      var items = store.items
+      var callbacks = 0
+      var keys = ["", " ", null, undefined, "-x"]
+      for (var i = 0; i < keys.length; i++) {
+        compare(store.perform({ type: "move", id: "3", stream: keys[i] }, function() {
+          callbacks++
+        }), "unknown stream")
+      }
+      wait(0)
+      compare(callbacks, 0)
+      compare(store.items, items)
+      compare(store.queue.length, 0)
+      compare(store.pending, null)
     }
 
     function test_failed_priority_rebases_status_without_changing_catalogue() {

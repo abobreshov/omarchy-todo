@@ -44,17 +44,41 @@ test("normalizeStreams keeps all nine keys, archived homes and document order; j
   assert.equal(Model.normalizeStreams([{ uid: "u", key: "k", archivedAt: "" }])[0].archivedAt, null);
 });
 
-test("UX §18: root JS has no metadata truthiness; each grep rule detects planted bad lines", () => {
+test("homeOf and isOrphan share active-home semantics for arrays and indexed catalogues", () => {
+  const board = JSON.parse(fs.readFileSync(path.join(here, "fixtures/consumer/board-archived-home.json"), "utf8"));
+  const streams = Model.normalizeStreams(board.streams);
+  const oracle = JSON.parse(fs.readFileSync(path.join(here, "fixtures/consumer/expected.json"), "utf8"))["board-archived-home.json"];
+  const homes = Model.indexStreams(streams);
+  for (const catalogue of [streams, homes]) {
+    for (const entry of streams) assert.equal(Model.homeOf(catalogue, entry.key), entry);
+    assert.equal(Model.homeOf(catalogue, "missing"), null);
+    assert.equal(Model.homeOf(catalogue, "toString"), null);
+    for (const task of board.tasks) {
+      assert.equal(Model.isOrphan(catalogue, task), oracle.orphanIds.includes(task.id));
+    }
+    for (const stream of ["work: old", "missing", null]) {
+      assert.equal(Model.isOrphan(catalogue, { stream, status: "done" }), false);
+      assert.equal(Model.isOrphan(catalogue, { stream, status: "doing" }), true);
+    }
+  }
+  assert.deepEqual(Object.keys(Model.indexStreams(null)), []);
+  assert.equal(Model.homeOf(null, "inbox"), null);
+  assert.equal(Model.isOrphan(undefined, { stream: null, status: "todo" }), true);
+});
+
+test("UX §18: root JS and QML have no metadata truthiness; each grep rule detects planted bad lines", () => {
   const rules = [
     [/\.(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["it.priority || null", "it.size && x", "it.priority ? a : b"]],
     [/!\s*!?\s*[\w$.]*\.(priority|size|stream|labels|horizon)\b/, ["!it.size", "!!it.priority"]],
     [/if\s*\(\s*[\w$.]*\.(priority|size|stream|labels|horizon)\s*\)/, ["if (it.priority)"]],
     [/\b(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["priority || null", "size && x", "horizon ? a : b"]],
+    [/!\s*(priority|size|stream|labels|horizon)\b/, ["if (!priority)", "!size", "!!horizon"]],
+    [/if\s*\(\s*!?\s*(priority|size|stream|labels|horizon)\s*\)/, ["if (size)", "if (!priority)", "if (horizon)"]],
   ];
   for (const [regex, planted] of rules) {
     for (const bad of planted) assert.equal(regex.test(bad), true, bad);
     for (const good of ["it.priority !== null", "Priority.normalize(v)", 'typeof v === "number"']) assert.equal(regex.test(good), false, good);
-    for (const file of fs.readdirSync(path.join(here, "..")).filter((f) => f.endsWith(".js"))) {
+    for (const file of fs.readdirSync(path.join(here, "..")).filter((f) => f.endsWith(".js") || f.endsWith(".qml"))) {
       fs.readFileSync(path.join(here, "..", file), "utf8").split("\n").forEach((line, i) => {
         assert.equal(regex.test(line), false, `${file}:${i + 1}: ${line}`);
       });

@@ -200,8 +200,8 @@ function addItem(doc, name, description, id, stream, horizon) {
     labels: [], priority: null, size: null
   })
   var action = { type: "add", name: cleanName, description: item.description }
-  if (stream !== undefined && stream !== null) action.stream = item.stream
-  if (horizon !== undefined && horizon !== null) action.horizon = item.horizon
+  if (key !== null && key !== "inbox") action.stream = key
+  if (item.horizon !== "short") action.horizon = item.horizon
   return accepted({ items: d.items.concat([item]), focus: d.focus }, cleanName, action, item)
 }
 
@@ -211,6 +211,7 @@ function move(doc, id, stream) {
   var it = Model.findItem(d.items, id)
   if (!it) return refused(d, "unknown id")
   var key = Model.squish(stream)
+  if (key === "" || key.charAt(0) === "-") return refused(d, "unknown stream")
   if (it.stream === key) return accepted(d, "ok", null)
   var items = replaceItem(d.items, id, function(c) { c.stream = key })
   return accepted({ items: items, focus: d.focus }, "ok", { type: "move", id: String(id), stream: key })
@@ -235,6 +236,7 @@ function setSize(doc, id, value) {
     if (value !== null) return refused(d, "size is for short-term tasks only")
     return accepted(d, "ok", null)
   }
+  if (it.size === value) return accepted(d, "ok", null)
   var items = replaceItem(d.items, id, function(c) { c.size = value })
   return accepted({ items: items, focus: d.focus }, "ok", { type: "setSize", id: String(id), value: value })
 }

@@ -72,10 +72,10 @@ TodoStore {
       // A read that lands while writes are queued, or that began before a
       // write finished, is superseded by the read after the last of them,
       // so it never undoes an optimistic change.
-      items = doc.items
-      focus = doc.focus
       streams = doc.streams
       hasStreams = doc.hasStreams
+      items = doc.items
+      focus = doc.focus
       sync = doc.sync
       if (Store.stampDir(doc.stamp) !== "") stampDir = Store.stampDir(doc.stamp)
       error = null
@@ -106,7 +106,12 @@ TodoStore {
     if (error) return Errors.unavailable(error)
     var r = Store.reduce({ items: items, focus: focus }, action)
     if (!r.ok) return r.reply
-    if (r.action === null) return r.reply
+    if (r.action === null) {
+      // callLater coalesces repeated calls of the same function; each
+      // accepted action needs its own completion, even with a shared done.
+      if (done) Qt.callLater(function() { done(null) })
+      return r.reply
+    }
     var prev = { items: items, focus: focus }
     items = r.doc.items
     focus = r.doc.focus

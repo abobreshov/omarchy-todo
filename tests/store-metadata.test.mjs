@@ -6,6 +6,7 @@ import { lib, here } from "./helpers.mjs";
 
 const Store = lib("Store.js");
 const Model = lib("Model.js");
+const Argv = lib("Argv.js");
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(here, "fixtures", name), "utf8"));
 const board = fixture("provisional/board-streams.json");
 const metadata = (it) => Object.fromEntries(["stream", "labels", "horizon", "priority", "size"].map((k) => [k, it[k]]));
@@ -89,13 +90,29 @@ test("setPriority preserves zero, clears with null, guards action values and ski
   }
 });
 
+test("move refuses empty and flag-shaped keys without changing the document or queuing an action", () => {
+  const doc = Store.fromCli(board);
+  const before = structuredClone(doc);
+  for (const stream of ["", " ", null, undefined, "-x", " -x "]) {
+    const r = Store.reduce(doc, { type: "move", id: 3, stream });
+    assert.equal(r.ok, false);
+    assert.equal(r.reply, "unknown stream");
+    assert.equal(r.action, null);
+    assert.equal(r.doc.items, doc.items);
+    assert.deepEqual(doc, before);
+  }
+});
+
 test("setSize allows values only on short tasks and clearing a non-short task queues nothing", () => {
   const doc = Store.fromCli(board);
   for (const value of ["XS", "S", "M", "L", "XL", null]) {
     const r = Store.reduce(doc, { type: "setSize", id: 3, value });
     assert.equal(r.reply, "ok");
     assert.deepEqual(get(r.doc, "3"), { ...get(doc, "3"), size: value });
-    assert.deepEqual(r.action, { type: "setSize", id: "3", value }, "same value still queues");
+    if (value === get(doc, "3").size) {
+      assert.equal(r.action, null, "same value queues nothing");
+      assert.equal(r.doc.items, doc.items);
+    } else assert.deepEqual(r.action, { type: "setSize", id: "3", value });
   }
   for (const value of ["m", "XXL", undefined, 1]) {
     assert.equal(Store.reduce(doc, { type: "setSize", id: 3, value }).reply, "bad size");
@@ -109,6 +126,10 @@ test("setSize allows values only on short tasks and clearing a non-short task qu
     assert.equal(cleared.action, null);
     assert.equal(cleared.doc.items, doc.items);
   }
+  const unset = Store.reduce(doc, { type: "setSize", id: 1, value: null });
+  assert.equal(unset.reply, "ok");
+  assert.equal(unset.action, null);
+  assert.equal(unset.doc.items, doc.items);
   for (const type of ["move", "setPriority", "setSize"]) {
     const r = Store.reduce(doc, { type, id: "missing" });
     assert.equal(r.ok, false);
@@ -117,7 +138,7 @@ test("setSize allows values only on short tasks and clearing a non-short task qu
   }
 });
 
-test("add defaults to Inbox but only persists optional fields when given", () => {
+test("add defaults to Inbox and short but persists only non-default compose fields", () => {
   const doc = Store.fromCli(board);
   const add = Store.reduce(doc, { type: "add", name: " Book  review ", stream: " work:  leadtone ", horizon: "mid" });
   assert.deepEqual(metadata(add.item), { stream: "work: leadtone", labels: [], horizon: "mid", priority: null, size: null });
@@ -128,9 +149,25 @@ test("add defaults to Inbox but only persists optional fields when given", () =>
   const junk = Store.reduce(doc, { type: "add", name: "Junk", stream: " ", horizon: "unknown" });
   assert.equal(junk.item.stream, "inbox");
   assert.equal(junk.item.horizon, "short");
-  assert.deepEqual(junk.action, { type: "add", name: "Junk", description: "", stream: "inbox", horizon: "short" });
+  assert.deepEqual(junk.action, { type: "add", name: "Junk", description: "" });
   const cleared = Store.reduce(doc, { type: "add", name: "Plain", stream: null, horizon: null });
   assert.deepEqual(cleared.action, plain.action);
+});
+
+test("§10 compose matrix reaches argv through action normalization, including default and unknown filters", () => {
+  const doc = Store.fromCli(board);
+  for (const stream of [undefined, null, " ", "inbox", " work:  tellkin "]) {
+    for (const horizon of [undefined, null, "unknown", "all", "short", "mid", "yearly", "long"]) {
+      const r = Store.reduce(doc, { type: "add", name: "N", description: "D", stream, horizon });
+      const flags = [];
+      if (stream === " work:  tellkin ") flags.push("--stream=work: tellkin");
+      if (["mid", "yearly", "long"].includes(horizon)) flags.push(`--horizon=${horizon}`);
+      assert.deepEqual(Argv.forAction("/fake/todocli", r.action),
+        ["/fake/todocli", "--source", "omarchy", "--json", "add", ...flags, "--description=D", "--", "N"]);
+      assert.equal(r.item.stream, stream === " work:  tellkin " ? "work: tellkin" : "inbox");
+      assert.equal(r.item.horizon, ["mid", "yearly", "long"].includes(horizon) ? horizon : "short");
+    }
+  }
 });
 
 test("UI-30 d: every existing copy reducer keeps all metadata before the next read", () => {
