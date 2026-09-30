@@ -156,28 +156,9 @@ function pillState(input) {
 
 // ---------------------------------------------------------------- footer
 
-// The UX §4.7 reason per sync-target error kind.
-function reason(error) {
-  if (!error) return ""
-  switch (error.kind) {
-    case "auth": return "signed out. Run: basecamp auth login"
-    case "auth_unreachable": return "credentials not reachable from todocli.service; terminal sync still works"
-    case "list_gone": return "synced list trashed or archived in Basecamp; nothing changed here"
-    case "removals_held": {
-      var m = /(\d+)/.exec(error.message || "")
-      return (m ? m[1] + " " : "") + "removals held; review, then todocli sync basecamp --accept-remote-removals"
-    }
-    case "offline": return "offline or Basecamp unreachable; retrying"
-    case "rate_limited": return "rate limited by Basecamp; retrying"
-    case "cli_missing": return "basecamp CLI not found"
-    case "vault_missing": return "vault folder not found"
-    case "write_failed": return "could not write the note"
-    default: {
-      var line = Model.firstLine(error.message)
-      return (line === "" ? String(error.kind || "error") : line).slice(0, 60)
-    }
-  }
-}
+// The UX §4.7 reason per sync-target error kind (Errors.syncReason: the
+// `sync all` transient uses the same copy).
+function reason(error) { return Errors.syncReason(error) }
 
 function footerTooltip(sync, now) {
   var out = []

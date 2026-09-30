@@ -4,6 +4,16 @@
 // The cli backend's error kinds (UX §7 E4, E5, E7, E8; PLAN A34) in one
 // place: the exit mapping that produces them and every piece of copy keyed
 // by kind. Adding a kind is one entry in ERRORS. Pure and total, as Model.js.
+//
+// Two classifiers, because a read or a write and a `sync all` fail
+// differently: `classifyExit` turns a board read's or a write's exit into
+// the store error the panel shows (E4, E5, E7); `classifySync` reads the
+// §3.5 envelope's `kind` off a failed `sync all` and answers the footer
+// transient, never a store error, since a sync failure says nothing about
+// the store (a `sync_held` run did not run, `removals_held` names its hint,
+// the other kinds are the target's problem and the footer already shows
+// it). The `kind` vocabulary is todocli's (tests/fixtures/contract/
+// kinds.json is not vendored; `envelope-<kind>.json` is, one per kind).
 
 // The UX §7 copy per error kind, in one table: `short` names it on the pill
 // and as the error-view title, `reason` is the `unavailable: <reason>` reply
@@ -65,6 +75,69 @@ function errorView(error, opts) {
     banner: c.banner ? c.banner(error, ctx) : null
   }
 }
+
+// ---------------------------------------------------------------- sync
+
+// The UX §4.7 reason per sync-target error kind, the copy the footer's
+// tooltip and the `sync all` transient share; an unknown kind reads as
+// the message's first line (at most 60 characters), or the kind itself.
+var SYNC_REASONS = {
+  auth: "signed out. Run: basecamp auth login",
+  auth_unreachable: "credentials not reachable from todocli.service; terminal sync still works",
+  list_gone: "synced list trashed or archived in Basecamp; nothing changed here",
+  offline: "offline or Basecamp unreachable; retrying",
+  rate_limited: "rate limited by Basecamp; retrying",
+  cli_missing: "basecamp CLI not found",
+  vault_missing: "vault folder not found",
+  write_failed: "could not write the note"
+}
+
+function syncReason(error) {
+  if (!error) return ""
+  if (error.kind === "removals_held") {
+    var m = /(\d+)/.exec(error.message || "")
+    return (m ? m[1] + " " : "") + "removals held; review, then todocli sync basecamp --accept-remote-removals"
+  }
+  if (SYNC_REASONS[error.kind]) return SYNC_REASONS[error.kind]
+  var line = Model.firstLine(error.message)
+  return (line === "" ? String(error.kind || "error") : line).slice(0, 60)
+}
+
+// The §3.5 envelope on a failed `--json` command's stdout: {kind, error}
+// or null when stdout is not one (an older binary, or nothing printed).
+function parseEnvelope(stdout) {
+  var data
+  try {
+    data = JSON.parse(String(stdout === undefined || stdout === null ? "" : stdout))
+  } catch (e) {
+    return null
+  }
+  if (!data || typeof data !== "object" || data.ok !== false) return null
+  return { kind: Model.squish(data.kind) || "error", message: Model.str(data.error) }
+}
+
+var MSG_SYNC_RUNNING = "Sync already running."
+
+// A finished `sync all`: null on success; {kind, message} otherwise, where
+// `message` is the footer transient. A binary that cannot be spawned (or a
+// wrapper's 127) is the store's E4 and is classified as a read would be
+// (`store: true`), because nothing the panel does can run either.
+function classifySync(code, stdout, stderr, spawnFailed) {
+  if (spawnFailed || code === 127) {
+    var missing = classifyExit(code, stderr, spawnFailed)
+    return { kind: missing.kind, message: missing.message, store: true }
+  }
+  if (code === 0) return null
+  var env = parseEnvelope(stdout)
+  var kind = env ? env.kind : (code === 75 ? "sync_held" : "error")
+  if (kind === "sync_held") return { kind: kind, message: MSG_SYNC_RUNNING }
+  if (kind === "busy") return { kind: kind, message: "Sync not started — database busy. Press R to retry." }
+  if (kind === "removals_held") return { kind: kind, message: "Sync held — " + syncReason(env) + "." }
+  var reason = env ? syncReason(env) : (Model.firstLine(stderr) || "todocli exited " + code)
+  return { kind: kind, message: "Sync failed — " + reason + "." }
+}
+
+// ---------------------------------------------------------------- writes
 
 // The transient for a reverted write (UX §7): the error, or a raw stderr.
 function msgNotSaved(errorOrStderr) {
