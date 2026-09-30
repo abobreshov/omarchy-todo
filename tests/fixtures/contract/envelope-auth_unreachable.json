@@ -1,0 +1,1 @@
+{"ok":false,"kind":"auth_unreachable","error":"basecamp auth_unreachable: Basecamp credentials not reachable from todocli.service (desktop keyring over D-Bus). Terminal sync still works: todocli sync basecamp. Check: systemctl --user show-environment | grep DBUS_SESSION_BUS_ADDRESS","code":3}

@@ -80,11 +80,18 @@ test("a fake that answers with a version 2 document or non-JSON is the protocol 
   assert.equal(Store.fromCli("plain text").error.kind, "protocol");
 });
 
-test("sync all through the fake: exit 0 re-reads, 75 is 'Sync already running.'", () => {
+test("sync all through the fake: exit 0 re-reads; a failure is the footer transient from the envelope's kind, never the store error", () => {
   const argv = Argv.forAction(fake, { type: "syncNow" });
   assert.deepEqual(argv.slice(1), ["--source", "omarchy", "--json", "sync", "all"]);
-  assert.equal(runArgv(argv).code, 0);
-  const held = runArgv(argv, { FAKE_EXIT: "75" });
-  assert.equal(Errors.classifyExit(held.code, held.stderr, false).kind, "busy");
-  assert.equal(Store.MSG_SYNC_RUNNING, "Sync already running.");
+  const ok = runArgv(argv);
+  assert.equal(ok.code, 0);
+  assert.equal(Errors.classifySync(ok.code, ok.stdout, ok.stderr, ok.spawnFailed), null);
+  assert.equal(JSON.parse(ok.stdout).basecamp.todolist_id, null, "the real reply's basecamp is an object");
+  const held = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "sync_held" });
+  assert.deepEqual(Errors.classifySync(held.code, held.stdout, held.stderr, false), { kind: "sync_held", message: "Sync already running." });
+  const removals = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "removals_held" });
+  assert.deepEqual(Errors.classifySync(removals.code, removals.stdout, removals.stderr, false), { kind: "removals_held", message: "Sync held — 2 removals held; review, then todocli sync basecamp --accept-remote-removals." });
+  const offline = runArgv(argv, { FAKE_EXIT: "6", FAKE_KIND: "offline" });
+  assert.deepEqual(Errors.classifySync(offline.code, offline.stdout, offline.stderr, false), { kind: "offline", message: "Sync failed — offline or Basecamp unreachable; retrying." });
+  assert.equal(Errors.classifyExit(offline.code, offline.stderr, false).kind, "failed", "the same exit would be E7 for a read; syncs never use classifyExit");
 });

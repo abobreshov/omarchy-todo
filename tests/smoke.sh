@@ -21,6 +21,16 @@ ln -sfn "$shell_dir/Commons" "$root/Commons"
 cp "$here/tests/fixtures/upstream-v1.json" "$home/.local/state/tathagat11.checklist-todo/todos.json"
 fake="$here/tests/fakebin/todocli"
 export FAKE_LOG="$scratch/argv.log"
+# The board the fake replays: the binary's own document (the vendored
+# contract golden) with its Basecamp entry failing, so the footer's error
+# branch and the pill's overlay are exercised.
+python3 - "$here/tests/fixtures/contract/board.json" "$scratch/board-offline.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+d["sync"] = [{"name": "basecamp", "enabled": True, "lastOkAt": "2026-09-29T09:02:30.000Z", "lastAttemptAt": "2026-09-29T09:03:30.000Z", "intervalSec": 60, "error": {"kind": "offline", "message": "offline or Basecamp unreachable; retrying"}}]
+json.dump(d, open(sys.argv[2], "w"))
+PY
+export FAKE_BOARD="$scratch/board-offline.json"
 
 pid=""
 stop() {

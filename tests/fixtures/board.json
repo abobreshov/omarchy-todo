@@ -1,6 +1,0 @@
-{ "version": 1, "focus": "Ship the invoice-export slice", "focus_task": 3,
-  "tasks": [ { "id": 3, "uid": "01a0e9f9-1c84-70b7-9fa9-61617eeb93ac", "title": "Wire the webhook", "status": "doing",
-      "notes": [ { "at": "2026-09-29T09:10:11.561Z", "text": "sandbox account acct_4471" } ], "plan": [ { "text": "map payload", "done": true } ],
-      "createdAt": "2026-09-28T21:39:41.489Z", "updatedAt": "2026-09-29T09:10:11.818Z", "description": "", "due": "2026-10-03", "completedAt": null, "source": "cli", "author": null } ],
-  "sync": [ { "name": "basecamp", "enabled": true, "lastOkAt": "2026-09-29T09:02:30.000Z", "lastAttemptAt": "2026-09-29T09:03:30.000Z", "intervalSec": 60,
-      "error": { "kind": "offline", "message": "offline or Basecamp unreachable; retrying" } } ] }

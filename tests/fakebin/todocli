@@ -1,40 +1,57 @@
 #!/usr/bin/env node
-// Fake `todocli` for the plugin's cli-store tests (PLAN A5).
+// Fake `todocli` for the plugin's cli-store tests and smoke test (PLAN A5).
+// It replays what the real binary prints: the goldens under
+// tests/fixtures/contract/ are generated from todocli by its tests/contract.rs
+// and vendored here byte for byte (tests/contract.test.mjs pins them).
 //   - logs argv (and the TODOCLI_* env) as one JSON line to $FAKE_LOG when set
-//   - `board` replays $FAKE_BOARD (a §3.7 document) or the bundled fixture
-//   - `FAKE_EXIT=<n>` exits with that code after printing `FAKE_STDOUT`
-//     to stdout and `FAKE_STDERR` to stderr
-//   - writes print the fixture's first task as the "affected task"
+//   - `board` replays $FAKE_BOARD when set, else contract/board.json
+//   - a write replays contract/write-<verb>.json (`focus` picks the
+//     `--task` or `--clear` reply); `sync` replays contract/sync-all.json
+//   - `FAKE_EXIT=<n>` exits with that code after printing the real §3.5
+//     envelope, contract/envelope-<$FAKE_KIND>.json (the kind by exit code
+//     when unset: 75 busy, 127 missing… else error), unless FAKE_STDOUT
+//     replaces stdout; FAKE_STDERR goes to stderr
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const contract = (name) => fs.readFileSync(path.join(here, "..", "fixtures", "contract", name), "utf8");
 const argv = process.argv.slice(2);
 if (process.env.FAKE_LOG) {
   const env = {};
   for (const k of Object.keys(process.env)) if (k.startsWith("TODOCLI_")) env[k] = process.env[k];
   fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ argv, env }) + "\n");
 }
-if (process.env.FAKE_EXIT && process.env.FAKE_EXIT !== "0") {
-  if (process.env.FAKE_STDOUT) process.stdout.write(process.env.FAKE_STDOUT);
-  if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);
-  process.exit(Number(process.env.FAKE_EXIT));
-}
-const boardPath = process.env.FAKE_BOARD || path.join(here, "..", "fixtures", "board.json");
-const doc = fs.readFileSync(boardPath, "utf8");
 let cmd = null;
+const rest = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === "--source" || argv[i] === "--config" || argv[i] === "--db") { i++; continue; }
-  if (argv[i].startsWith("--")) continue;
-  cmd = argv[i];
-  break;
+  if (cmd === null) {
+    if (argv[i].startsWith("--")) continue;
+    cmd = argv[i];
+  } else rest.push(argv[i]);
+}
+const KIND_BY_EXIT = { 1: "not_found", 2: "config", 3: "auth", 5: "rate_limited", 6: "offline", 7: "error", 69: "list_gone", 74: "db", 75: "busy" };
+if (process.env.FAKE_EXIT && process.env.FAKE_EXIT !== "0") {
+  const code = Number(process.env.FAKE_EXIT);
+  if (process.env.FAKE_STDOUT !== undefined) process.stdout.write(process.env.FAKE_STDOUT);
+  else if (argv.includes("--json") && code !== 127) {
+    const kind = process.env.FAKE_KIND || KIND_BY_EXIT[code] || "error";
+    process.stdout.write(contract("envelope-" + kind + ".json"));
+  }
+  if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);
+  process.exit(code);
 }
 if (cmd === "board" || cmd === "list" || cmd === "render") {
-  process.stdout.write(doc);
+  process.stdout.write(process.env.FAKE_BOARD ? fs.readFileSync(process.env.FAKE_BOARD, "utf8") : contract("board.json"));
 } else if (cmd === "sync") {
-  process.stdout.write('{"targets":[],"basecamp":null}\n');
+  process.stdout.write(contract("sync-all.json"));
+} else if (cmd === "focus") {
+  process.stdout.write(contract(rest.includes("--clear") ? "write-focus-clear.json" : "write-focus-task.json"));
+} else if (["add", "start", "done", "reopen", "step", "rm"].includes(cmd)) {
+  process.stdout.write(contract("write-" + cmd + ".json"));
 } else {
-  const parsed = JSON.parse(doc);
-  process.stdout.write(JSON.stringify(parsed.tasks[0] || { id: 1 }) + "\n");
+  process.stderr.write("fake todocli: no contract reply for " + JSON.stringify(argv) + "\n");
+  process.exit(1);
 }
