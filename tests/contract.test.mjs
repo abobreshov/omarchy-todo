@@ -27,7 +27,7 @@ const fake = path.join(here, "fakebin", "todocli");
 // sha256 of every vendored golden; todocli's tests/contract.rs regenerates
 // them and fails when a sibling checkout's copy differs.
 const PINS = {
-  "board.json": "1ac5d50562ff22c8dc815638ee4c004c14ba27f3280e3c8b1d47d79a8400aa41",
+  "board.json": "a2afa400e35e8094027307a76f9e4e425f8cb0f9302be1405765e8db444061da",
   "envelope-auth.json": "df0146f24ce4d920f1a3553f1bf5c0c99be3b3a0cd09e78be9e4ec5ca5888373",
   "envelope-auth_unreachable.json": "c37cf36963da0cce37bdd78a18b66d391eddd20ecb2c5585bde0cf25f8e6dcb0",
   "envelope-busy.json": "2b817a4aed957e7e460762f5da85d4ca1ed25d1b85ba6a3b00184008665e6d45",
@@ -48,14 +48,14 @@ const PINS = {
   "pomodoro-retarget.json": "26a560cea71bc863a2d2a0e56cb407a1924bde3a94ae7804d8e186aefa87ad99",
   "pomodoro-start.json": "a553305b029ad90ee0b1903e5b2bcd9d9e886f519032b0510a35772e1a7989c2",
   "sync-all.json": "259f2bb2b31b85fc877ba005dcfe211719f7636c935f54ff0d6fccf7b0e0ab74",
-  "write-add.json": "29696b00c85d12990ed5e5167bc73dd17061516fbe778507bbba88648e116439",
-  "write-done.json": "4094b5531e6c940a8c912499ede4570d2fa88a2fd5ff3677eea0250b10589108",
+  "write-add.json": "b040aa1f72f0818982eb5463f5fded4a4937ffad8aa5bfd1ac37deb6999b32e8",
+  "write-done.json": "624a60cdf8eaf62ea84fb6dc6322b23bc4176ec5b77421bc6c533b6e1e26dad7",
   "write-focus-clear.json": "ede8edcf708eeaa2afcc66f7cc6d8b891ed03472399d50621273ca9a5119c3ec",
   "write-focus-task.json": "2133d780e1b89c33588ad5e8299db29a9e32458e4927564ad0e801f77fcb3ab4",
-  "write-reopen.json": "29696b00c85d12990ed5e5167bc73dd17061516fbe778507bbba88648e116439",
-  "write-rm.json": "442f7c6be59cd54c9900c22ea0fc1fc2f38087c444fa71522781c43a4a6922d1",
-  "write-start.json": "142ecbb0fdaf95982c19b48b6f6a36344816fb1bedc71d5907e38654d2a76f8a",
-  "write-step.json": "ea5891032878c4ea59717df03c93586c45e1f48ce9164cbca37039c9e4ac9245",
+  "write-reopen.json": "799b7b04d6ff8c3f62c7c7427c3ad454df9dbfa32506a76ad933a1b4d2de1a37",
+  "write-rm.json": "a461205368529a353658c166f463194bbd3cc6bbc28d115bad03644e988c1e80",
+  "write-start.json": "ccd6a9b759a57724135988e0e1733daba6aa909b8e14400dcee6fe26c48bc593",
+  "write-step.json": "bb065a8dbb69a8a0ac5fe4c0004c57665e59784771cefa53694b2c4423bd951d",
 };
 
 const golden = (name) => fs.readFileSync(path.join(dir, name), "utf8");
