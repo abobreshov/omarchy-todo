@@ -7,21 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-01
+
+### Added
+
+- Streams in a tab strip with Overview and Inbox, grouped tasks in Overview,
+  and a move mode for sending a task to another stream.
+- A Done tab for the last seven local calendar days. Stream views keep tasks
+  completed today in their block's tail; the day is sampled when the panel opens.
+- Horizon sections and filtering, with a badge for a task's horizon or size.
+- Priority marks and size chips, with keyboard and mouse pickers. Zero is a
+  set priority, and done marks stay dim.
+- Script controls `addTo`, `tab`, `move`, `setPriority` and `setSize`.
+  `dump` adds `tab`, `streams`, `strip`, `horizonFilter`, `moving` and `rows`;
+  open tasks carry stream, labels, horizon, priority and size.
+- Canonical CLI fixtures replace the provisional copies, while older-CLI
+  and adversarial consumer fixtures remain as regression inputs.
+- `tools/reads-board.mjs` checks that a plugin reads every task before cutover.
+
+### Changed
+
+- The sync footer follows the one Obsidian target after Basecamp sync cleanup.
+- Stream controls need the S9 CLI's `streams` catalogue; an older CLI keeps
+  today's list. The real-binary contract test runs only with an absolute
+  `TODOCLI_BIN`, explicitly requested by the engineer.
+
+### Fixed
+
+- Focus-line ghosts ignore clicks while a picker is open; detail priority
+  marks use the row's colours, and the detail footer keeps a fixed height.
+
+## [2.0.0]
+
 Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/omarchy-checklist-todo)
 1.0.0 as `abobreshov.todo`.
 
 ### Changed
-
-- Stream views: pinned Overview/Inbox tabs, user streams and a final Done tab;
-  grouped Overview, horizon sections/filter, uid-based move mode, and cursor
-  anchoring through reads and optimistic writes.
-- Priority marks and size chips share fixed slots across rows. Pixel side-scroll
-  and Shift+wheel switch one tab per gesture without changing hover geometry.
-- CLI boards with streams keep today's done tasks in each block's tail. The
-  Done tab groups the last seven local calendar days and holds reopened rows
-  until close. `completedAt` survives optimistic writes and rollback.
-- `dump` exposes the displayed tab, active stream summaries, strip window,
-  filter, move target and four row shapes. `tab(name)` selects a tab for scripts.
 
 - Plugin id `abobreshov.todo`; IPC target and state directory
   (`~/.local/state/abobreshov.todo/todos.json`) follow it. On the first
@@ -155,5 +176,7 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
 - Every monitor's bar stays in sync via a directory watch.
 - Standard Omarchy bar-widget behaviour: move/reorder, enable/disable, hot reload.
 
-[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/abobreshov/omarchy-todo/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/abobreshov/omarchy-todo/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/tathagat11/omarchy-checklist-todo/releases/tag/v1.0.0
