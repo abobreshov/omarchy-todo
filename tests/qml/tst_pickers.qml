@@ -121,6 +121,32 @@ Item {
       compare(panel.currentTab,"s"); compare(panel.ui.picker,null)
       compare(panel.store.queue.length,0)
     }
+    function addStreams(n) {
+      var more=[]
+      for (var i=0;i<n;i++) more.push({uid:"s"+i,key:"work: stream"+i,name:"stream"+i,group:"work",system:false,archivedAt:null,open:0})
+      panel.store.streams=panel.store.streams.concat(more)
+      wait(30)
+    }
+    // UX §24.3 and 4.2 rule 4: the overflow indicator's click goes through
+    // the same guard, so under a picker it selects no hidden tab.
+    function test_indicator_click_is_inert_under_picker() {
+      addStreams(8)
+      panel.dispatch({type:"key",key:"!"})
+      panel.dispatch({type:"key",key:"]"})
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      tryVerify(function(){return findChild(panel,"indicatorRight")!==null})
+      var ind=findChild(panel,"indicatorRight"), first=panel.stripFirst
+      verify(ind.visible); verify(ind.hidden>0)
+      var nearest=panel.tabs[panel.strip.last+2].uid
+      mouseClick(ind,ind.width/2,ind.height/2)
+      compare(panel.currentTab,"overview"); compare(panel.stripFirst,first)
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      compare(panel.store.queue.length,0)
+      // The same click with the picker closed reaches the nearest hidden tab.
+      panel.dispatch({type:"esc"}); compare(panel.ui.picker,null)
+      mouseClick(ind,ind.width/2,ind.height/2)
+      compare(panel.currentTab,nearest)
+    }
     // UX §24.1: the row mark's tone wiring (Priority.markTone on the value
     // and on isDone: a done row's mark is dim whatever its level).
     function test_row_mark_tones() {
