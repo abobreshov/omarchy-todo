@@ -211,7 +211,7 @@ files bind and forward.
 | `Chrome.js` | The pill and the sync footer. |
 | `Pomodoro.js` | The hand-off: `pomodoroIntent`, `pomodoroMessage`, `classifyShell`, `pomodoroView`. |
 | `Keys.js` | `keyAction` (the key map) and `reduceUi` (the view machine: list, compose, detail, error, cursor, armed delete). |
-| `Order.js` | Priority/status/horizon/id comparators, tick-time peer snapshots, session-map translation/pruning, completion order and local calendar-day windows (`DONE_DAYS = 7`). |
+| `Order.js` | Status/priority/horizon/id comparators (doing first), tick-time peer snapshots, session-map translation/pruning, completion order and local calendar-day windows (`DONE_DAYS = 7`). |
 | `Tabs.js` | Active tabs, labels and resolution, clamped navigation and move targets by uid, whole-tab windows, angle/pixel wheel accumulators. |
 | `Streams.js` | Grouped Overview, stream blocks and sections, done tails, Done-tab day rows, filter/count/empty copy and document-wide slots. |
 | `Cursor.js` | Selectable rows, identity anchoring and temporary-id translation, minimal scroll adjustment. |

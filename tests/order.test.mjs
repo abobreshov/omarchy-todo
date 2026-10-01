@@ -8,11 +8,15 @@ const sorted = tasks => tasks.slice().sort(O.compareOpen).map(t => t.id);
 const latch = (it, block, order = 0) => ({ item: { ...it, status: 'done' }, latch: O.latchOf(it, block, 's1', order) });
 const placed = (open, held, cmp) => O.placeLatched(open.slice().sort(cmp || O.compareOpen), held, cmp).map(t => Number(t.id));
 
-test('priority first, zero above unset, numeric IDs before temporary IDs (AC-ST.39)', () => {
+test('doing first, then priority, zero above unset, numeric IDs before temporary IDs (AC-ST.39, DECISIONS D34)', () => {
   const tasks = [task(6, { status: 'doing' }), task(4, { priority: 50 }), task(5, { priority: 50, horizon: 'mid' }), task(7, { priority: 90, horizon: 'long' })];
-  assert.deepEqual(sorted(tasks), ['7','4','5','6']);
+  assert.deepEqual(sorted(tasks), ['6','7','4','5']);
   assert.deepEqual(sorted(tasks.map(t => ({ ...t, priority: null }))), ['6','4','5','7']);
   assert.deepEqual(sorted([task('t1'), task(10), task(2), task(9, { priority: 0 })]), ['9','2','10','t1']);
+  // DECISIONS D34: status rank decides before priority, whatever the levels.
+  assert.deepEqual(sorted([task(1, { priority: 100 }), task(2, { status: 'doing' })]), ['2','1']);
+  assert.deepEqual(sorted([task(1, { status: 'doing', priority: 25 }), task(2, { status: 'doing', priority: 75 })]), ['2','1']);
+  assert.deepEqual(sorted([task(1, { status: 'doing' }), task(2, { status: 'doing', priority: 0 })]), ['2','1']);
   assert.equal(O.compareId(task('t1'), task('t2')), 0);
   assert.ok(O.comparePriority({}, task(1, { priority: 0 })) > 0);
   assert.equal(O.statusRank(task(1, { status: 'done' })), 2);
@@ -38,6 +42,31 @@ test('crossing peers, one-sided drop, deletion, newcomer, started peer (AC-ST.40
   assert.deepEqual(O.placeLatched([], [latch(tied[1],tied,2),latch(tied[0],tied,1)]).map(t=>t.id), ['t1','t2']);
   assert.deepEqual(O.placeLatched([a]), [a]);
   assert.equal(O.recorded(a, null).priority, 100);
+});
+
+test('a doing peer stays above a latched todo row whatever the priorities (AC-ST.40, DECISIONS D34)', () => {
+  const l = task(2, { priority: 100 }), t = task(3, { priority: 50 });
+  for (const before of [null, 0, 100]) {
+    const d = task(1, { status: 'doing', priority: before }), held = latch(l, [d, l, t]);
+    for (const after of [null, 0, 100]) assert.deepEqual(placed([{ ...d, priority: after }, t], [held]), [1,2,3]);
+  }
+  const held = latch(l, [l, t]);
+  assert.deepEqual(placed([t, task(4, { status: 'doing' })], [held]), [4,2,3]);
+  assert.deepEqual(placed([{ ...t, status: 'doing', priority: 0 }], [held]), [3,2]);
+});
+
+test('AC-35.5 store: the doing #6 heads the first block before and after #1 turns critical (AC-ST.40, DECISIONS D34)', () => {
+  const S = lib('Streams.js'), home = 'work: leadtone', t = (id, over) => task(id, { stream: home, ...over });
+  const items = [t(1), t(2, { priority: 60 }), t(3, { horizon: 'mid' }), t(4, { horizon: 'mid', priority: 25 }), t(6, { status: 'doing', horizon: 'yearly' })];
+  const shape = rows => rows.map(r => r.kind === 'item' ? Number(r.item.id) : r.horizon);
+  assert.deepEqual(shape(S.tabRows(items, home, { streams })), [6,2,1,'mid',4,3]);
+  const { latches } = O.recordTick({ latches: {}, tickSequence: 0 }, { type: 'setStatus', id: '2', status: 'done' }, { items, catalogue: streams, metadata: true, currentTab: 's8' });
+  assert.deepEqual(latches[2].peers, { 1: null, 6: null });
+  // `todocli priority 1 critical` (100) runs before the panel closes.
+  const after = items.map(it => it.id === '1' ? { ...it, priority: 100 } : it.id === '2' ? { ...it, status: 'done' } : it);
+  const rows = S.tabRows(after, home, { streams, latches });
+  assert.deepEqual(shape(rows), [6,2,1,'mid',4,3]);
+  assert.equal(rows[1].item.status, 'done');
 });
 
 test('local midnight, DST and month end; invalid instants are in no window (AC-37.5)', () => {

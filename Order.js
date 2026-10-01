@@ -4,7 +4,6 @@
 .import "Queue.js" as Queue
 
 var DONE_DAYS = 7
-var PRIORITY_FIRST = true
 var HORIZONS = Priority.HORIZONS
 function compareId(a, b) {
   var an = Model.isNumericId(a.id), bn = Model.isNumericId(b.id)
@@ -21,9 +20,10 @@ function comparePriority(a, b) {
   return bp - ap
 }
 function statusRank(it) { return it.status === "doing" ? 0 : it.status === "done" ? 2 : 1 }
+// DECISIONS D34: doing comes first, always; then priority (unset last, 0 above
+// unset), horizon rank, id. Horizon sections keep priority then id.
 function compareOpen(a, b) {
-  var p = comparePriority(a, b), s = statusRank(a) - statusRank(b)
-  return (PRIORITY_FIRST ? p || s : s || p) || HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon) || compareId(a, b)
+  return statusRank(a) - statusRank(b) || comparePriority(a, b) || HORIZONS.indexOf(a.horizon) - HORIZONS.indexOf(b.horizon) || compareId(a, b)
 }
 function compareSection(a, b) { return comparePriority(a, b) || compareId(a, b) }
 function dayStartOf(ms) {
