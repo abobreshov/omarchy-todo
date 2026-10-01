@@ -9,7 +9,7 @@ const Queue = lib("Queue.js");
 const Model = lib("Model.js");
 const Argv = lib("Argv.js");
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(here, "fixtures", name), "utf8"));
-const board = fixture("provisional/board-streams.json");
+const board = fixture("contract/board-streams.json");
 const metadata = (it) => Object.fromEntries(["stream", "labels", "horizon", "priority", "size"].map((k) => [k, it[k]]));
 const get = (doc, id) => Model.findItem(doc.items, id);
 
@@ -33,7 +33,7 @@ test("AC-ST.21: older cli defaults; migrated Inbox-only catalogue enables capabi
   assert.equal(old.hasStreams, false);
   assert.deepEqual(old.streams, []);
   old.items.forEach((it) => assert.deepEqual(metadata(it), defaults));
-  const migrated = Store.fromCli(fixture("provisional/board-migrated.json"));
+  const migrated = Store.fromCli(fixture("contract/board.json"));
   assert.equal(migrated.hasStreams, true);
   assert.equal(migrated.streams.length, 1);
   assert.equal(migrated.streams[0].key, "inbox");
@@ -185,7 +185,7 @@ test("UI-30 d: every existing copy reducer keeps all metadata before the next re
 
 test("AC-ST.61: completedAt maps, stamps, clears, survives queue rebase and rollback", () => {
   const now = Date.parse("2026-09-30T10:00:00.000Z");
-  const doc = Store.fromCli(fixture("provisional/board-streams.json"));
+  const doc = Store.fromCli(fixture("contract/board-streams.json"));
   assert.equal(get(doc, "8").completedAt, "2026-09-29T08:45:00.000Z");
   const before = { items: doc.items, focus: doc.focus };
   const done = Store.reduce(before, { type: "setStatus", id: "3", status: "done" }, now);

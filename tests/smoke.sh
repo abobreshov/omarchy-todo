@@ -182,7 +182,7 @@ check "E14 the new file holds the item" "$(python3 -c 'import json,sys; print([t
 stop
 
 # ---- P2 views: fixture clocks never constrain the moving Done window --------
-cp "$here/tests/fixtures/provisional/board-streams.json" "$scratch/board-streams.json"
+cp "$here/tests/fixtures/contract/board-streams.json" "$scratch/board-streams.json"
 export FAKE_BOARD="$scratch/board-streams.json" FAKE_MUTATE_METADATA=1
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8
@@ -208,7 +208,7 @@ check "P2 tab 0" "$(call tab 0)" "ok"
 check "P2 unknown tab" "$(call tab nowhere)" "unknown stream"
 stop
 unset FAKE_MUTATE_METADATA
-export FAKE_BOARD="$here/tests/fixtures/provisional/board-migrated.json"
+export FAKE_BOARD="$here/tests/fixtures/contract/board.json"
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8
 check "P2 Inbox-only strip" "$(dump | field 'd["strip"]')" "None"

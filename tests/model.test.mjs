@@ -28,7 +28,7 @@ test("metadata defaults, document coercion and copies keep one task shape (UI-30
 });
 
 test("normalizeStreams keeps all nine keys, archived homes and document order; junk is total", () => {
-  const board = JSON.parse(fs.readFileSync(path.join(here, "fixtures/provisional/board-streams.json"), "utf8"));
+  const board = JSON.parse(fs.readFileSync(path.join(here, "fixtures/contract/board-streams.json"), "utf8"));
   assert.deepEqual(Model.normalizeStreams(board.streams), board.streams);
   assert.deepEqual(Model.normalizeStreams(null), []);
   assert.deepEqual(Model.normalizeStreams([null, 1, "x", {}, { uid: "a" }, { key: "a" }]), []);

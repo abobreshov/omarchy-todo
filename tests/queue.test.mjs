@@ -21,7 +21,7 @@ test("realId translates mapped view ids and leaves unmapped ids as strings", () 
 });
 
 test("UI-30: failed setPriority followed by queued setStatus keeps zero and every field", () => {
-  const base = Store.fromCli(fixture("provisional/board-streams.json"));
+  const base = Store.fromCli(fixture("contract/board-streams.json"));
   const before = { items: base.items, focus: base.focus };
   const w1 = Store.reduce(before, { type: "setPriority", id: "2", value: 75 });
   const w2 = Store.reduce(w1.doc, { type: "setStatus", id: "2", status: "doing", at: NOW });
@@ -34,11 +34,11 @@ test("UI-30: failed setPriority followed by queued setStatus keeps zero and ever
   assert.notEqual(get(r.doc, "2").labels, get(base, "2").labels);
   assert.deepEqual(r.entries[0].before, before);
   assert.deepEqual(w1.doc.items[1].priority, 75, "input snapshot remains optimistic");
-  assert.deepEqual(base.streams, JSON.parse(fixture("provisional/board-streams.json")).streams);
+  assert.deepEqual(base.streams, JSON.parse(fixture("contract/board-streams.json")).streams);
 });
 
 test("AC-ST.41: failed move rebases an add and its priority under the temporary id", () => {
-  const base = Store.fromCli(fixture("provisional/board-streams.json"));
+  const base = Store.fromCli(fixture("contract/board-streams.json"));
   const before = { items: base.items, focus: base.focus };
   const w1 = Store.reduce(before, { type: "move", id: "3", stream: "work: leadtone" });
   const w2 = Store.reduce(w1.doc, { type: "add", name: "Book review", stream: "work: leadtone", id: "t1" });
@@ -57,7 +57,7 @@ test("AC-ST.41: failed move rebases an add and its priority under the temporary 
   assert.deepEqual(r.entries[0].before, before);
   assert.equal(get(r.entries[1].before, "t1").priority, null);
   assert.equal(get(entries[0].before, "3").stream, "work: leadtone");
-  const reply = { ...JSON.parse(fixture("provisional/write-priority.json")), id: 21 };
+  const reply = { ...JSON.parse(fixture("contract/write-priority.json")), id: 21 };
   const map = Queue.rememberId({}, "t1", JSON.stringify(reply));
   assert.equal(Queue.realId("t1", map), "21");
   const cliPath = path.join(here, "fakebin/todocli");

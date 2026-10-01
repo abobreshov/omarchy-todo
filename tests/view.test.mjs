@@ -15,7 +15,7 @@ const boardFixture = (name) => Store.fromCli(fs.readFileSync(path.join(here, "fi
 const expected = JSON.parse(fs.readFileSync(path.join(here, "fixtures/consumer/expected.json"), "utf8"));
 
 test("dump.open carries eight metadata keys, zero and copied labels in unchanged list order", () => {
-  const doc = boardFixture("provisional/board-streams.json");
+  const doc = boardFixture("contract/board-streams.json");
   const dump = View.dumpView({ backend: "cli", ...doc, sessionDone: { 8: true } });
   assert.deepEqual(dump.open.map((it) => it.id), ["3", "1", "2", "4", "5", "6", "7"]);
   for (const entry of dump.open) {
@@ -283,7 +283,7 @@ test("dumpView produces the UX §10.3 shape", () => {
 
 
 test("P2 help lines, metadata rows, empty scopes, move targets and degraded modes", () => {
-  const doc=boardFixture("provisional/board-streams.json");
+  const doc=boardFixture("contract/board-streams.json");
   assert.equal(View.helpLine("list","cli",true,true,"overview"),"n new · d done · s doing · f focus · p pomodoro · ! priority · z size · m move · [ ] 0-9 tabs · v horizon · x x or Del delete · r reload · R sync · Tab next panel");
   assert.equal(View.helpLine("list","cli",true,false,"overview").includes("m move"),false);
   assert.equal(View.helpLine("list","cli",true,false,"overview").includes("v horizon"),true);
@@ -304,7 +304,7 @@ test("P2 help lines, metadata rows, empty scopes, move targets and degraded mode
 
 
 test("global focus caption on Overview and Done, hidden on its home and in today's modes",()=>{
-  const doc=boardFixture("provisional/board-streams.json");
+  const doc=boardFixture("contract/board-streams.json");
   const line=View.focusLine(doc.items,doc.focus,idle);
   assert.equal(View.focusCaption(line,doc.streams,"overview",true),"tellkin");
   assert.equal(View.focusCaption(line,doc.streams,"done",true),"tellkin");

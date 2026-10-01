@@ -1,5 +1,5 @@
-// CONTRACT-S9 revision 3, §12.3: provisional producer bytes and permanent
-// consumer inputs. Future stream behaviour is pinned as data, not implemented.
+// CONTRACT-S9 revision 6, §§12.1–12.3: canonical producer bytes and permanent
+// consumer inputs; historical consumer bytes survive the canonical switch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -13,8 +13,11 @@ const Errors = lib("Errors.js");
 const root = path.join(here, "fixtures");
 const read = (dir, file) => fs.readFileSync(path.join(root, dir, file), "utf8");
 const json = (dir, file) => JSON.parse(read(dir, file));
-const seed = json("provisional", "board-streams.json");
+const seed = json("contract", "board-streams.json");
 const expected = json("consumer", "expected.json");
+// The SHA-pinned old-CLI input carries the pre-D18 sync block; consumer
+// fixtures retain it by §12.3, while canonical producer boards have one target.
+const consumerSeed = { ...seed, sync: json("consumer", "board-old-cli.json").sync };
 const OLD_CLI_SHA256 = "a2afa400e35e8094027307a76f9e4e425f8cb0f9302be1405765e8db444061da";
 const NOW = "2026-09-29T09:10:11.561Z";
 const defaults = { stream: "inbox", labels: [], horizon: "short", priority: null, size: null };
@@ -22,7 +25,20 @@ const taskKeys = ["id", "uid", "title", "status", "notes", "plan", "createdAt", 
 const streamKeys = ["uid", "key", "group", "name", "position", "system", "createdAt", "archivedAt", "open"];
 const inbox = { uid: "00000000-0000-7000-8000-000000000001", key: "inbox", group: null, name: "inbox", position: 0, system: true, createdAt: "2026-09-30T00:00:00.000Z", archivedAt: null };
 const files = {
-  provisional: ["board-migrated.json", "board-streams.json", "show-task.json", "write-move.json", "write-horizon.json", "write-label.json", "write-priority.json", "write-size.json"],
+  contract: [
+    "board-streams.json", "board.json", "envelope-auth.json",
+    "envelope-auth_unreachable.json", "envelope-busy.json", "envelope-config.json",
+    "envelope-db.json", "envelope-error.json", "envelope-list_gone.json",
+    "envelope-not_found.json", "envelope-offline.json", "envelope-rate_limited.json",
+    "envelope-refused.json", "envelope-removals_held.json", "envelope-sync_held.json",
+    "envelope-usage.json", "pomodoro-cancel.json", "pomodoro-done.json",
+    "pomodoro-interrupt.json", "pomodoro-retarget.json", "pomodoro-start.json",
+    "show-task.json", "sync-all.json", "write-add.json",
+    "write-done.json", "write-focus-clear.json", "write-focus-task.json",
+    "write-horizon.json", "write-label.json", "write-move.json",
+    "write-priority.json", "write-reopen.json", "write-rm.json",
+    "write-size.json", "write-start.json", "write-step.json"
+  ],
   consumer: ["board-old-cli.json", "board-archived-home.json", "board-ties.json", "board-empty-stream.json", "write-failed-refused.json", "expected.json"]
 };
 const task = (board, id) => board.tasks.find((t) => t.id === id);
@@ -91,7 +107,7 @@ test("§12.3 directory lists, JSON parsing and compact one-line bytes", () => {
 
 test("§§1–3 board schemas, task id order, catalogue order and open counts", () => {
   for (const [dir, names] of Object.entries(files)) {
-    for (const file of names.filter((f) => f.startsWith("board-") && f !== "board-old-cli.json")) {
+    for (const file of names.filter((f) => (f === "board.json" || f.startsWith("board-")) && f !== "board-old-cli.json")) {
       // Archived-home has precisely two task edits and unchanged seed counts:
       // its inconsistency is adversarial by design (contract §12.3).
       checkBoard(json(dir, file), file !== "board-archived-home.json");
@@ -113,7 +129,7 @@ test("§3.1 seed covers zero, tuned priorities, uppercase sizes and archived don
 });
 
 test("§4.1 show carries ordered typed events with zero as an integer", () => {
-  const show = json("provisional", "show-task.json");
+  const show = json("contract", "show-task.json");
   checkTask(show, [...taskKeys, "events"]);
   assert.deepEqual(show, { ...task(seed, 2), updatedAt: NOW, priority: 75, events: show.events });
   ascending(show.events.map((e) => e.id));
@@ -132,7 +148,7 @@ test("§12.2 write replies derive from their seed task with only the stated edit
     label: [5, { labels: ["health", "running"] }], priority: [2, { priority: 75 }], size: [7, { size: "M" }]
   };
   for (const [verb, [id, fields]] of Object.entries(writes)) {
-    const reply = json("provisional", "write-" + verb + ".json");
+    const reply = json("contract", "write-" + verb + ".json");
     checkTask(reply);
     assert.equal(Object.hasOwn(reply, "events"), false);
     assert.equal(reply.updatedAt, NOW);
@@ -141,13 +157,13 @@ test("§12.2 write replies derive from their seed task with only the stated edit
 });
 
 test("§3.1 migrated-only board appends defaults and inserts the sole Inbox", () => {
-  const old = json("contract", "board.json");
+  const old = json("consumer", "board-old-cli.json");
   const migrated = {
     version: old.version, focus: old.focus, focus_task: old.focus_task,
     tasks: old.tasks.map((t) => ({ ...t, ...defaults })),
-    streams: [{ ...inbox, open: 1 }], sync: old.sync, stamp: old.stamp
+    streams: [{ ...inbox, open: 1 }], sync: seed.sync, stamp: old.stamp
   };
-  assert.deepEqual(json("provisional", "board-migrated.json"), migrated);
+  assert.deepEqual(json("contract", "board.json"), migrated);
 });
 
 test("§12.3 older CLI bytes stay pinned independently of future producer goldens", () => {
@@ -165,7 +181,7 @@ test("§12.3 older CLI bytes stay pinned independently of future producer golden
 test("§12.3 archived-home differs only in the two specified stream keys", () => {
   const board = json("consumer", "board-archived-home.json");
   const pin = expected["board-archived-home.json"];
-  assert.deepEqual(board, { ...seed, tasks: seed.tasks.map((t) => ({ ...t, stream: pin.streams[t.id] ?? t.stream })) });
+  assert.deepEqual(board, { ...consumerSeed, tasks: seed.tasks.map((t) => ({ ...t, stream: pin.streams[t.id] ?? t.stream })) });
   assert.deepEqual(pin.orphanIds, [4, 7]);
   assert.equal(task(board, 4).stream, "work: old");
   assert.equal(task(board, 7).stream, "work: zzz");
@@ -199,7 +215,7 @@ test("§12.3 empty stream keeps its tab catalogue and the archived entry", () =>
   assert.equal(board.tasks.some((t) => t.stream === "personal: goals"), false);
   assert.equal(board.streams.find((s) => s.key === "personal: goals").open, 0);
   assert.deepEqual(board.streams.find((s) => s.key === "work: old"), seed.streams.find((s) => s.key === "work: old"));
-  assert.deepEqual(board, { ...seed, tasks: seed.tasks.filter((t) => ![5, 6].includes(t.id)), streams: seed.streams.map((s) => s.key === "personal: goals" ? { ...s, open: 0 } : s) });
+  assert.deepEqual(board, { ...consumerSeed, tasks: seed.tasks.filter((t) => ![5, 6].includes(t.id)), streams: seed.streams.map((s) => s.key === "personal: goals" ? { ...s, open: 0 } : s) });
   assert.equal(pin.omittedGroup, "personal: goals");
   assert.equal(pin.tab, "personal: goals");
   assert.equal(pin.emptyMessage, "Nothing in personal: goals yet. Press + to add a todo.");

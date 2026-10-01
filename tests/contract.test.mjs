@@ -176,17 +176,15 @@ test("the fake replays the goldens by verb and prints the real envelope on FAKE_
   assert.match(unknown.stderr, /no contract reply/);
 });
 
-// The real binary, when one is at hand, under an environment that names
+// The real binary, only when TODOCLI_BIN is set, under an environment that names
 // every path todocli reads (HOME, XDG_*, TODOCLI_CONFIG, TODOCLI_DB): the
 // live store, config, state directory and note are never touched. Skipped
 // without a binary unless TODOCLI_REQUIRE_BIN is set (CI).
 function todocliBin() {
-  if (process.env.TODOCLI_BIN) return process.env.TODOCLI_BIN;
-  for (const d of (process.env.PATH || "").split(path.delimiter)) {
-    const p = path.join(d, "todocli");
-    if (d && fs.existsSync(p)) return p;
-  }
-  return null;
+  const bin = process.env.TODOCLI_BIN;
+  if (!bin) return null;
+  assert.ok(path.isAbsolute(bin), "TODOCLI_BIN must be an absolute path");
+  return bin;
 }
 
 test("the real todocli under an isolated environment prints the shapes the goldens hold", (t) => {

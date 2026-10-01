@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { lib, here } from './helpers.mjs';
 const View=lib('View.js'), Store=lib('Store.js'), Keys=lib('Keys.js');
-const canonical=()=>Store.fromCli(fs.readFileSync(path.join(here,'fixtures/provisional/board-streams.json'),'utf8'));
+const canonical=()=>Store.fromCli(fs.readFileSync(path.join(here,'fixtures/contract/board-streams.json'),'utf8'));
 const row=(id,status,stream,horizon,badge,priority,size)=>({kind:'item',id,status,stream,horizon,badge,priority,size});
 const base={version:1,backend:'cli',cliPath:'/fake/todocli',view:'list',stale:false,error:null,
   pill:{glyph:'g',label:'l',tooltip:'t',urgent:false,dimmed:false},focus:{text:'',taskId:null},done:[],banner:null,footer:null,message:null};
