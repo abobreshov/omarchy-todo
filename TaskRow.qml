@@ -155,7 +155,7 @@ Item {
     HoverHandler { id: priorityHover }
     PanelToolTip {
       visible: priorityHover.hovered && row.prioritySlot && row.priorityLevel !== ""
-      text: "priority: " + row.priorityLevel + " (" + row.priorityValue + ")"
+      text: Priority.priorityText(row.priorityValue)
       fontFamily: row.family
     }
   }

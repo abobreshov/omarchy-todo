@@ -94,7 +94,7 @@ test("parseEnvelope reads the §3.5 envelope and nothing else", () => {
   assert.equal(Errors.parseEnvelope(null), null);
 });
 
-test("syncReason is the UX §4.7 copy per kind (Chrome.reason delegates to it)", () => {
+test("syncReason uses the first message line, then the kind (Chrome.reason delegates)", () => {
   assert.equal(Errors.syncReason({ kind: "auth" }), "auth");
   assert.equal(Errors.syncReason({ kind: "removals_held", message: "3 removals held" }), "3 removals held");
   assert.equal(Errors.syncReason({ kind: "weird", message: "line\nmore" }), "line");

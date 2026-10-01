@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "Priority.js" as Priority
 
 Item {
   id: slot
@@ -36,7 +37,7 @@ Item {
   HoverHandler { id: hover }
   PanelToolTip {
     visible: hover.hovered && slot.chip
-    text: slot.chip ? "size: " + slot.sizeValue : ""
+    text: slot.chip ? Priority.sizeText(slot.sizeValue) : ""
     fontFamily: slot.panel.contentFontFamily
   }
 }

@@ -20,9 +20,11 @@ Item {
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
 
-  height: Math.max(glyph.implicitHeight, label.implicitHeight) + Style.spacing.sm
+  height: Math.max(glyph.implicitHeight, label.implicitHeight, picker ? pickerLoader.implicitHeight : 0) + Style.spacing.sm
 
   Loader {
+    id: pickerLoader
+    objectName: "pickerLoader"
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
     active: footer.picker !== null

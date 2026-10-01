@@ -48,15 +48,17 @@ function unavailable(ctx) {
   if (ctx.hasStreams !== true) return "Priority and size need a newer todocli."
   return ""
 }
+function priorityText(value) { return "priority: " + (value === null ? "(none)" : levelOf(value) + " (" + value + ")") }
+function sizeText(value) { return "size: " + (value === null ? "(none)" : value) }
 function fieldsLine(item, metadata) {
   if (!metadata || !item) return ""
   var parts = []
-  if (item.priority !== null) parts.push("priority: " + levelOf(item.priority) + " (" + item.priority + ")")
-  if (item.size !== null) parts.push("size: " + item.size)
+  if (item.priority !== null) parts.push(priorityText(item.priority))
+  if (item.size !== null) parts.push(sizeText(item.size))
   return parts.join(" · ")
 }
 function resultMessage(action) {
-  if (action.type === "setPriority") return "#" + action.id + " priority: " + (action.value === null ? "(none)" : levelOf(action.value) + " (" + action.value + ")")
-  if (action.type === "setSize") return "#" + action.id + " size: " + (action.value === null ? "(none)" : action.value)
+  if (action.type === "setPriority") return "#" + action.id + " " + priorityText(action.value)
+  if (action.type === "setSize") return "#" + action.id + " " + sizeText(action.value)
   return ""
 }

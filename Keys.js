@@ -65,7 +65,6 @@ function isDoneRow(item) {
 function keyAction(view, key, ctx) {
   var c = ctx || {}
   if (view === "compose") return null
-  if (c.picker) return null
   if (key === "r") return { type: "refresh" }
   if (key === "R") return { type: "syncNow" }
   if (view === "error") return null
@@ -228,7 +227,7 @@ function reduceUi(ui, event, ctx) {
   if (ev.type === "rows") next = Cursor.reanchor(next, c.rows || [], c.idMap)
   var pc = copyUi(c)
   pc.item = keyContext(next, c).item
-  // Legacy reducer callers omit capabilities; production always supplies them.
+  // keys.test.mjs has capability-free contexts; production always supplies them.
   var picked = next.picker || c.hasStreams !== undefined || c.backend === "json" ? Pickers.reduce(next, ev, pc) : null
   if (picked) {
     next = picked.ui; actions = picked.actions

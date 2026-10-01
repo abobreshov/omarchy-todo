@@ -95,14 +95,13 @@ test('clamped steps, every option digit/click, current unset and zero survive', 
   }
   assert.deepEqual(run([key('!'),key('1')],ctx(task({priority:0}))).actions,[]);
   assert.equal(Pickers.current('priority',null),null);
-  assert.equal(Keys.keyAction('list','!',{picker:{}}),null);
   assert.equal(Keys.keyAction('list','z',{item:task()}),null);
 });
 
 test('open picker ignores list keys, other picker, compose keys, hover, wheels and navigation', () => {
   for (const k of ['!','z']) {
     const ui=run([key(k)]).ui;
-    const events=['j','k','d','s','f','p','m','v','n','N','+','?',k==='!'?'z':'!','9','r','R'].map(key)
+    const events=['j','k','d','s','f','p','m','v','n','N','+',k==='!'?'z':'!','9','r','R'].map(key)
       .concat([{type:'move',dx:1,dy:1},{type:'hover',index:7},{type:'stepTab',direction:1},{type:'chooseTab',uid:'I'},{type:'delete'},{type:'tab'},{type:'pickOption',value:'bad'}]);
     const r=run(events,ctx(),ui);
     assert.deepEqual(r.ui,ui); assert.deepEqual(r.actions,[]);
@@ -131,4 +130,31 @@ test('lifecycle: close, view change, error, dropped task, size horizon drift and
   assert.equal(real.ui.picker.id,'40');
   assert.deepEqual(run([key('4')],ctx({...task(),id:'40'}),real.ui).actions,[{type:'setPriority',id:'40',value:100}]);
   assert.equal(Pickers.reduce(Keys.initialUi(),{type:'hover'},{}),null);
+});
+
+test('refused picker keys disarm delete with production capabilities', () => {
+  for (const [k,c] of [
+    ['z',ctx(task({horizon:'mid',size:null}))],
+    ['!',ctx(task(),{backend:'json'})], ['z',ctx(task(),{backend:'json'})],
+    ['!',ctx(task(),{hasStreams:false})],
+    ['!',ctx(task(),{currentTab:'done'})]
+  ]) {
+    const armed=run([{type:'delete',now:1}],c).ui;
+    assert.equal(armed.armedId,'9');
+    const refused=run([key(k)],c,armed);
+    assert.equal(refused.ui.armedId,''); assert.equal(refused.ui.armedAt,0);
+    const again=run([{type:'delete',now:2}],c,refused.ui);
+    assert.equal(again.ui.armedId,'9');
+    assert.deepEqual(again.actions,[]);
+  }
+});
+
+test('? toggles picker help without setting or leaving the picker', () => {
+  for (const k of ['!','z']) {
+    const open=run([key(k)]).ui;
+    const shown=run([key('?')],ctx(),open);
+    assert.equal(shown.ui.help,true); assert.deepEqual(shown.ui.picker,open.picker);
+    assert.deepEqual(shown.actions,[]);
+    assert.deepEqual(run([key('?')],ctx(),shown.ui).ui,open);
+  }
 });

@@ -21,7 +21,7 @@ Column {
   readonly property string family: panel.contentFontFamily
   readonly property bool armed: hasItem && panel.ui.armedId === item.id
   readonly property var tips: View.actionTooltips(item, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
-  readonly property string statusText: hasItem ? View.statusLine(item, { backend: panel.backend, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
+  readonly property string statusText: hasItem ? View.statusLine(item, { backend: panel.backend, hasStreams: panel.store.hasStreams, strip: panel.tabStripAvailable, focus: panel.focusModel, pomodoro: panel.pomodoro }) : ""
 
   component Body: Text {
     width: parent.width
@@ -88,15 +88,37 @@ Column {
 
   Caption { objectName: "detailStatus"; width: parent.width; text: view.statusText }
 
-  Caption {
-    objectName: "detailFields"
+  Item {
     width: parent.width
-    text: Priority.fieldsLine(view.item, view.panel.metadata)
-    visible: text !== ""
+    height: Math.max(fieldsMark.implicitHeight, fields.implicitHeight)
+    visible: fields.text !== ""
+    Text {
+      id: fieldsMark
+      objectName: "detailPriorityMark"
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      width: view.hasItem && view.item.priority !== null ? Style.space(12) : 0
+      text: view.hasItem ? Priority.markOf(view.item.priority) : ""
+      color: view.dim
+      font.family: view.family
+      font.pixelSize: Style.font.body
+    }
+    Caption {
+      id: fields
+      objectName: "detailFields"
+      anchors.left: fieldsMark.right
+      anchors.leftMargin: fieldsMark.width > 0 ? Style.spacing.controlGap : 0
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: Priority.fieldsLine(view.item, view.panel.metadata)
+      visible: text !== ""
+    }
   }
 
   Caption {
     objectName: "detailLabels"
+    wrapMode: Text.WordWrap
+    elide: Text.ElideNone
     width: parent.width
     text: view.hasItem && view.panel.metadata ? view.item.labels.map(function(label) { return "#" + label }).join(" ") : ""
     visible: text !== ""

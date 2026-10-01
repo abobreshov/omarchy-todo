@@ -314,3 +314,20 @@ test("global focus caption on Overview and Done, hidden on its home and in today
   assert.equal(View.focusCaption(null,doc.streams,"overview",true),"");
   assert.equal(View.focusCaption({item:null},doc.streams,"overview",true),"");
 });
+
+test('detail status shows the stream key while the strip is available, the Inbox as "Inbox", and a non-short horizon (UX §12)', () => {
+  const c={backend:'cli',hasStreams:true,strip:true};
+  for (const [horizon,name] of [['mid','mid-term'],['yearly','yearly'],['long','long-term']]) {
+    const it=item('9','Task','todo',{stream:'work: tellkin',horizon,plan:[{text:'Step',done:false}]});
+    assert.equal(View.statusLine(it,c),G.todo+' todo · #9 · work: tellkin · '+name+' · plan 0/1');
+    assert.equal(View.statusLine(it,{...c,strip:false}),G.todo+' todo · #9 · '+name+' · plan 0/1','no strip: the horizon alone');
+    assert.equal(View.statusLine(it,{backend:'cli',hasStreams:false,strip:true}),G.todo+' todo · #9 · plan 0/1');
+    assert.equal(View.statusLine(it,{backend:'json',hasStreams:true,strip:true}),G.todo+' todo · plan 0/1');
+  }
+  for (const stream of ['inbox',null]) {
+    assert.equal(View.statusLine(item('9','Task','todo',{stream}),c),G.todo+' todo · #9 · Inbox');
+    assert.equal(View.statusLine(item('9','Task','todo',{stream}),{...c,strip:false}),G.todo+' todo · #9');
+  }
+  assert.equal(View.statusLine(item('9','Task','todo',{stream:'work: old'}),c),G.todo+' todo · #9 · work: old');
+  assert.equal(View.statusLine(item('9','Task','todo',{stream:'work: tellkin'}),{...c,strip:false}),G.todo+' todo · #9');
+});

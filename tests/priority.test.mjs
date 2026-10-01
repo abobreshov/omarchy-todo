@@ -32,3 +32,11 @@ test("Q-S24 bands, glyphs, zero and unset share one derivation", () => {
     assert.equal(Priority.levelOf(v), ""); assert.equal(Priority.markOf(v), "");
   }
 });
+
+
+test('metadata copy is shared by tooltips, fields and result messages', () => {
+  for (const [value,text] of [[null,'priority: (none)'],[0,'priority: low (0)'],[80,'priority: high (80)']])
+    assert.equal(Priority.priorityText(value),text);
+  for (const [value,text] of [[null,'size: (none)'],['XS','size: XS'],['XL','size: XL']])
+    assert.equal(Priority.sizeText(value),text);
+});

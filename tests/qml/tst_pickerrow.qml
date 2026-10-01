@@ -15,7 +15,7 @@ Item {
     mode: ({kind:"priority",id:"9",choice:75})
     item: top.task
     foreground: "white"
-    fontFamily: Style.font.family
+    fontFamily: "DejaVu Serif"
     onPicked: function(value) { top.clicks.push(value) }
   }
   TestCase {
@@ -29,7 +29,17 @@ Item {
     function test_caption_geometry_every_choice_hover_and_click() {
       for (var kind of ["priority","size"]) {
         row.mode={kind:kind,id:"9",choice:Pickers.current(kind,top.task)}
+        row.fontFamily="DejaVu Serif"
         wait(20); waitForRendering(row)
+        for (var family of ["DejaVu Serif",Style.font.family]) {
+          row.fontFamily=family
+          wait(20)
+          var title=findChild(row,"pickerTitle"), names=Pickers.labels(kind)
+          compare(title.width,row.fontMetrics.advanceWidth(title.text)+2*Style.space(4))
+          for (var n=0;n<names.length;n++)
+            compare(cell(n).width,row.fontMetrics.advanceWidth(names[n])+2*Style.space(4))
+          console.log("PROBE picker font "+kind+" family="+family+" "+geometry())
+        }
         compare(row.fontMetrics.font.pixelSize,Style.font.caption)
         var before=geometry(), values=Pickers.options(kind), labels=Pickers.labels(kind)
         verify(row.implicitWidth<=308)

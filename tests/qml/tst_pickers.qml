@@ -3,6 +3,7 @@ import QtTest
 import "../.." as Todo
 import "../../Model.js" as Model
 import "../../Argv.js" as Argv
+import "../../Priority.js" as Priority
 
 // Production Panel + footer + detail; stubbed I/O never spawns anything.
 Item {
@@ -19,6 +20,7 @@ Item {
     y: 530; width: 308
     panel: panel
   }
+  Todo.FocusLine { id: focusLine; y: 440; width: 308; panel: panel }
   Todo.TaskList { id: scrollList; width: 340; maxHeight: 350; panel: panel; visible: false }
   TestCase {
     name: "PickerWiring"; when: windowShown
@@ -42,9 +44,40 @@ Item {
       wait(30)
       panel.dispatch({type:"hover",index:panel.firstRow})
     }
+    function assertFooterFits(name) {
+      var actualFooter=findChild(panel,name)
+      tryVerify(function(){return findChild(actualFooter,"pickerLoader").item!==null})
+      var row=findChild(actualFooter,"pickerLoader").item
+      verify(actualFooter.height>=row.height)
+    }
+    function test_focus_line_click_does_not_confirm_picker() {
+      panel.store.focus={text:"Task 3",taskId:"3"}
+      wait(30)
+      panel.dispatch({type:"hover",index:panel.firstRow})
+      panel.dispatch({type:"key",key:"!"})
+      panel.dispatch({type:"key",key:"]"})
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      mouseClick(focusLine,20,focusLine.height/2)
+      compare(panel.store.queue.length,0)
+      compare(panel.store.items[0].priority,80)
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      compare(panel.ui.view,"list")
+    }
+    function test_step_click_twin_is_inert_under_picker() {
+      panel.store.items=[task("3",{plan:[{text:"Step",done:false}]})]
+      panel.openDetail("3")
+      panel.dispatch({type:"key",key:"!"})
+      panel.toggleStepAt(1)
+      compare(panel.store.queue.length,0); compare(panel.detailItem.plan[0].done,false)
+      verify(panel.ui.picker!==null)
+      panel.dispatch({type:"esc"})
+      panel.toggleStepAt(1)
+      compare(panel.store.queue.length,1); compare(panel.detailItem.plan[0].done,true)
+    }
     function test_real_footer_click_and_E25_rollback() {
       panel.dispatch({type:"key",key:"!"})
       compare(panel.ui.picker.id,"4")
+      assertFooterFits("listStatusFooter")
       tryVerify(function(){return findChild(footer,"pickerCell_4")!==null})
       var cell=findChild(footer,"pickerCell_4"), point=cell.mapToItem(footer,cell.width/2,cell.height/2)
       mouseClick(footer,point.x,point.y)
@@ -65,9 +98,14 @@ Item {
       wait(30)
       var status=findChild(panel,"detailStatus"), fields=findChild(panel,"detailFields"), labels=findChild(panel,"detailLabels")
       compare(fields.text,"priority: low (0) · size: M")
-      verify(fields.y>status.y); verify(labels.y>fields.y)
+      var fieldsY=fields.mapToItem(status.parent,0,0).y
+      verify(fieldsY>status.y); verify(labels.y>fieldsY)
+      var mark=findChild(panel,"detailPriorityMark")
+      compare(mark.text,Priority.markOf(0)); verify(mark.width>0)
+      compare(labels.wrapMode,Text.WordWrap); compare(labels.elide,Text.ElideNone)
       panel.dispatch({type:"key",key:"z"})
       compare(panel.ui.picker.kind,"size")
+      assertFooterFits("detailStatusFooter")
       panel.dispatch({type:"key",key:"2"})
       compare(panel.ui.picker,null)
       compare(panel.detailItem.size,"S")

@@ -29,6 +29,7 @@ function reduce(ui, event, ctx) {
   if (next.view === "compose" || next.moving) return null
   if (!mode) {
     if (key !== "!" && key !== "z") return null
+    next.armedId = ""; next.armedAt = 0
     if (c.busy || ["list", "detail"].indexOf(next.view) === -1 || (next.view === "list" && c.currentTab === "done")) return result()
     if (!c.item) return result()
     var error = Priority.unavailable(c)
@@ -36,7 +37,6 @@ function reduce(ui, event, ctx) {
     if (key === "z" && c.item.horizon !== "short") { message(sizeError(c.item)); return result() }
     var kind = key === "!" ? "priority" : "size"
     next.picker = { kind: kind, id: c.item.id, choice: current(kind, c.item) }
-    next.armedId = ""; next.armedAt = 0
     return result()
   }
   if (["open", "close", "resetCursor", "selectTask"].indexOf(ev.type) !== -1 || (ev.type === "storeError" && ev.error && ev.error.kind !== "busy")) {
@@ -55,6 +55,7 @@ function reduce(ui, event, ctx) {
   mode = { kind: mode.kind, id: id, choice: mode.choice }
   next.picker = mode
   if (ev.type === "esc" || key === (mode.kind === "priority" ? "!" : "z")) { next.picker = null; return result() }
+  if (key === "?") { next.help = !next.help; return result() }
   if (c.busy) return result()
   var values = options(mode.kind), at = values.indexOf(mode.choice)
   if (key === "[" || key === "]") mode.choice = values[Math.max(0, Math.min(values.length - 1, at + (key === "]" ? 1 : -1)))]

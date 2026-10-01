@@ -85,7 +85,7 @@ test("UI-12 footer: the UX §4.7 table", () => {
   assert.equal(Chrome.footer([null, target("obsidian")], NOW, {}).tooltip, "Obsidian: ok 2m ago", "holes are skipped");
 });
 
-test("footer reasons follow the UX §4.7 kind table", () => {
+test("footer reasons use the first message line, cut at 60 characters", () => {
   for (const message of ["vault folder not found", "could not write the note"])
     assert.equal(Chrome.reason({ kind: "error", message }), message);
   assert.equal(Chrome.reason({ kind: "removals_held", message: "3 removals held" }), "3 removals held");

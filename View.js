@@ -3,6 +3,7 @@
 .import "Streams.js" as Streams
 .import "Tabs.js" as Tabs
 .import "Pickers.js" as Pickers
+.import "RowActions.js" as RowActions
 
 // The view decisions and the copy (UX §3.1, §4.2, §4.4, §4.5, §4.7, §10.3):
 // the list's order and the session's done rows, the focus line, the detail
@@ -14,9 +15,9 @@ var MSG_DONE_ATTACHED = "Done. p on the next task moves the pomodoro."
 
 // The delete copy (UX §4.2, §4.4): the tooltip of the row's {del} ghost and
 // of the detail view's button, and what both say once the row is armed.
-var TIP_DELETE = "Delete (x x or Del)"
-var TIP_DELETE_ARMED = "Click or x again to delete"
-var CAPTION_ARMED = "click or x again to delete"
+var TIP_DELETE = RowActions.TIP_DELETE
+var TIP_DELETE_ARMED = RowActions.TIP_DELETE_ARMED
+var CAPTION_ARMED = RowActions.CAPTION_ARMED
 
 // ---------------------------------------------------------------- session
 
@@ -137,38 +138,7 @@ function helpLine(view, backend, hasStreams, stripShown, tab, picker) {
 
 // ---------------------------------------------------------------- row cluster
 
-// UX §4.2 row anatomy, the right cluster: the plan progress, then three
-// fixed slots: the focus mark or its ghost, the pomodoro mark or its ghost,
-// and the {del} ghost. Each slot is always laid out and a ghost only fades
-// in (opacity) while the row is hovered: a control made visible under the
-// pointer takes the hover from the row, which hides it again, and the icons
-// flicker (the hover glitch); a hidden control that keeps its space cannot.
-// The armed delete (x, Delete, BackSpace or the ghost, once) replaces the
-// progress and the first two slots with its caption; the {del} slot stays,
-// `held` (shown and live without hover), so the second click lands where
-// the first did. A done row keeps it: done rows can be deleted too.
-function rowActions(item, ctx) {
-  var c = ctx || {}
-  var it = item || { id: "", status: "todo" }
-  var armed = c.armed === true
-  var isDone = it.status === "done"
-  var isFocus = Model.isFocused(c.focus, it.id)
-  var attached = Model.isAttached(c.pomodoro, it.id)
-  return {
-    armed: armed,
-    caption: armed ? CAPTION_ARMED : "",
-    progress: armed ? "" : Model.planProgress(it),
-    focus: { mark: !armed && isFocus, ghost: !armed && !isFocus && !isDone, held: false, tooltip: "Set focus (f)" },
-    pomodoro: {
-      mark: !armed && attached,
-      running: attached && c.pomodoro.running === true,
-      ghost: !armed && !attached && !isDone,
-      held: false,
-      tooltip: "Start pomodoro (p)"
-    },
-    del: { mark: false, ghost: true, held: armed, tooltip: armed ? TIP_DELETE_ARMED : TIP_DELETE }
-  }
-}
+function rowActions(item, ctx) { return RowActions.rowActions(item, ctx) }
 
 // ---------------------------------------------------------------- focus line
 
@@ -218,6 +188,12 @@ function statusLine(item, ctx) {
   var c = ctx || {}
   var parts = [Model.statusGlyph(item.status) + " " + item.status]
   if (c.backend === "cli") parts.push("#" + item.id)
+  if (c.backend === "cli" && c.hasStreams === true) {
+    // UX §12: the key while the strip is available (two or more streams;
+    // the Inbox reads "Inbox"), the horizon name when it is not short.
+    if (c.strip === true) parts.push(item.stream === null || item.stream === "inbox" ? "Inbox" : item.stream)
+    if (item.horizon !== "short") parts.push(Streams.horizonCopy(item.horizon).name)
+  }
   var progress = Model.planProgress(item)
   if (progress !== "") parts.push("plan " + progress)
   if (item.notes && item.notes.length > 0) parts.push(item.notes.length + " note" + (item.notes.length === 1 ? "" : "s"))

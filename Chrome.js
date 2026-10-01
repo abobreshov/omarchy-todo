@@ -54,8 +54,8 @@ function pillState(input) {
 
 // ---------------------------------------------------------------- footer
 
-// The UX §4.7 reason per sync-target error kind (Errors.syncReason: the
-// `sync all` transient uses the same copy).
+// Errors.syncReason uses the first message line, cut at 60 characters;
+// the `sync all` transient uses the same copy.
 function reason(error) { return Errors.syncReason(error) }
 
 function footerTooltip(sync, now) {

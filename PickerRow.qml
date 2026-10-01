@@ -20,8 +20,9 @@ Row {
   FontMetrics { id: metrics; font: title.font }
   Text {
     id: title
+    objectName: "pickerTitle"
     text: row.mode.kind === "priority" ? "Priority" : "Size"
-    width: metrics.advanceWidth(text) + 2 * row.cellPadding
+    width: { metrics.font.family; metrics.font.pixelSize; return metrics.advanceWidth(text) + 2 * row.cellPadding }
     height: row.height
     verticalAlignment: Text.AlignVCenter
     color: row.foreground
@@ -38,7 +39,7 @@ Row {
       readonly property var value: row.values[index]
       readonly property bool current: value === row.currentValue
       readonly property bool choice: value === row.mode.choice
-      width: metrics.advanceWidth(modelData) + 2 * row.cellPadding
+      width: { metrics.font.family; metrics.font.pixelSize; return metrics.advanceWidth(modelData) + 2 * row.cellPadding }
       height: row.height
       Rectangle { anchors.fill: parent; color: Style.hoverFillFor(row.foreground, Color.accent); opacity: hover.hovered ? 1 : 0 }
       Rectangle {

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { lib, here, item, target, NOW } from "./helpers.mjs";
+import { lib, here, item, NOW } from "./helpers.mjs";
 
 const Model = lib("Model.js");
 const Store = lib("Store.js");
@@ -111,9 +111,6 @@ test("fromCli: a bad document or an unknown version is the protocol error (E8)",
   assert.equal(Store.fromCli("[]").error.kind, "protocol");
   assert.equal(Store.fromCli({ version: 1, tasks: "no" }).error.kind, "protocol");
 });
-
-
-
 
 test("the stores' transients", () => {
   assert.equal(Store.MSG_SYNC_NEEDS_CLI, "Sync needs backend = cli.");

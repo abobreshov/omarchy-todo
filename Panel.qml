@@ -217,6 +217,7 @@ Panel {
   function hoverRow(index) { dispatch({ type: "hover", index: index }) }
   function openDetail(id) { dispatch({ type: "selectTask", id: id }) }
   function activateFocusLine() {
+    if (ui.picker) return
     dispatch({ type: "hover", index: 0 })
     dispatch({ type: "enter" })
   }
@@ -233,7 +234,7 @@ Panel {
     else apply(action)
   }
   function tickRow(id) { rowKey(id, "d") }
-  function toggleStepAt(n) { if (detailItem) perform({ type: "toggleStep", id: detailItem.id, n: n }) }
+  function toggleStepAt(n) { if (!ui.picker && detailItem) perform({ type: "toggleStep", id: detailItem.id, n: n }) }
 
   // ---- operations: the IPC functions, the keys and the buttons call these.
   // Every mutation goes through the store's perform; ticking a row done
