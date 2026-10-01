@@ -35,7 +35,10 @@ Item {
     var total = widths.slice(1).reduce(function(a, b) { return a + b }, 0)
     return Math.max(0, available - (total > available ? 2 * indicatorWidth : 0))
   }
+  // UX §24.3: no tab switch can hide an open picker. Only the click side
+  // (a tab or the overflow indicator) is guarded; the IPC `tab` twin is not.
   function choose(t) {
+    if (strip.panel.ui.picker) return
     if (panel.ui.moving) panel.pickTarget(t.uid)
     else panel.selectTab(t.uid)
   }

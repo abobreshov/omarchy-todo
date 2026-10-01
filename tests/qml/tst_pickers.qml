@@ -102,6 +102,25 @@ Item {
         compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
       }
     }
+    // UX §24.3: while picking, no tab switch can hide the picker; the IPC
+    // `tab` twin stays unguarded, so only the strip's click side refuses.
+    function test_tab_click_is_inert_under_picker() {
+      panel.store.streams=panel.store.streams.concat([{uid:"s",key:"work: a",name:"a",group:"work",system:false,archivedAt:null,open:0}])
+      wait(30)
+      panel.dispatch({type:"key",key:"!"})
+      panel.dispatch({type:"key",key:"]"})
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      tryVerify(function(){return findChild(panel,"tabClick_s")!==null})
+      var tab=findChild(panel,"tabClick_s")
+      verify(tab.visible); verify(tab.enabled)
+      mouseClick(tab,tab.width/2,tab.height/2)
+      compare(panel.currentTab,"overview")
+      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      compare(panel.store.queue.length,0)
+      compare(panel.tab("work: a"),"ok")
+      compare(panel.currentTab,"s"); compare(panel.ui.picker,null)
+      compare(panel.store.queue.length,0)
+    }
     function test_detail_mark_tones_and_fixed_footer() {
       panel.store.items=[task("4",{priority:100}),task("3",{priority:100,status:"done"})]
       panel.store.sync=[{name:"obsidian",enabled:false,lastOkAt:null,lastAttemptAt:null,intervalSec:null,error:null}]
