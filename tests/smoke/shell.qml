@@ -13,6 +13,32 @@ ShellRoot {
   property var settingsObj: JSON.parse(Quickshell.env("SMOKE_SETTINGS") || "{}")
   property var widget: loader.item
 
+  // Positioners lay out at polish, which a window never shown never runs:
+  // lay out `item`'s subtree, children first.
+  function layOut(item, depth) {
+    if (!item || depth > 40) return
+    var kids = item.children || []
+    for (var i = 0; i < kids.length; i++) layOut(kids[i], depth + 1)
+    if (item.contentItem && item.contentItem !== item && item.contentItem.children) layOut(item.contentItem, depth + 1)
+    if (typeof item.forceLayout === "function") item.forceLayout()
+  }
+
+  // Depth-first search by objectName through items' and windows' data.
+  function named(obj, name, depth) {
+    if (!obj || depth > 40) return null
+    if (obj.objectName === name) return obj
+    var lists = [obj.data, obj.contentItem]
+    for (var l = 0; l < lists.length; l++) {
+      var kids = lists[l]
+      if (!kids || kids.length === undefined) continue
+      for (var i = 0; i < kids.length; i++) {
+        var hit = named(kids[i], name, depth + 1)
+        if (hit) return hit
+      }
+    }
+    return null
+  }
+
   QtObject {
     id: fakeBar
     property color foreground: "#ffffff"
@@ -66,6 +92,25 @@ ShellRoot {
       if (!panel) return "unavailable"
       panel.rowKey(id, "x")
       return JSON.stringify(panel.ui.armedId)
+    }
+    // The list row of task `id` in the closed panel (its content is built
+    // eagerly, and laid out here): the glyph and title texts, whether the
+    // delegate is visible, and whether it lies inside the rows viewport,
+    // which clips (CHANGELOG 2.1.1: the done tail drew an empty row).
+    function row(id: string): string {
+      var rows = loader.item && loader.item.panel ? root.named(loader.item.panel, "todoRows", 0) : null
+      if (!rows) return "unavailable"
+      root.layOut(rows.parent, 0)
+      var list = rows.contentItem.children[0].children
+      for (var i = 0; i < list.length; i++) {
+        var r = list[i]
+        if (r.itemData === undefined || r.itemData.id !== id) continue
+        var texts = []
+        for (var j = 0; j < r.children.length; j++) if (typeof r.children[j].text === "string") texts.push(r.children[j])
+        return JSON.stringify({ glyph: texts[0].text, title: texts[1].text, visible: r.visible && texts[0].visible && texts[1].visible,
+          opacity: r.opacity, height: r.height, inViewport: r.y >= rows.contentY && r.y + r.height <= rows.contentY + rows.height })
+      }
+      return "no row"
     }
     function width(): string { return String(loader.item ? loader.item.implicitWidth : -1) }
     function quit(): void { Qt.quit() }

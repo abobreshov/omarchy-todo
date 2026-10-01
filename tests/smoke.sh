@@ -215,6 +215,33 @@ check "P2 Inbox-only strip" "$(dump | field 'd["strip"]')" "None"
 check "P2 Inbox-only catalogue" "$(dump | field 'len(d["streams"])')" "1"
 check "P2 Inbox-only Done refusal" "$(call tab done)" "No streams yet · todocli stream add adds one"
 stop
+# The done tail (CHANGELOG 2.1.1): a task done today follows the open rows,
+# and its delegate is visible, inside the clipped rows viewport, with the
+# done glyph and its title. The dump's rows carry no title (UX §10.3), so the
+# row's text comes from the delegate itself (smoke `row`, which lays out the
+# closed panel). The board is written now, so #5 is done on the view day.
+python3 - "$here/tests/fixtures/contract/board.json" "$scratch/board-tail.json" <<'PY'
+import copy, datetime, json, sys
+d = json.load(open(sys.argv[1]))
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+done = next(t for t in d["tasks"] if t["id"] == 5)
+done["completedAt"] = done["updatedAt"] = now
+for n in (6, 7):
+    t = copy.deepcopy(done)
+    t.update(id=n, uid=t["uid"][:-2] + "%02d" % n, title="Open %d" % n, status="todo", completedAt=None)
+    d["tasks"].append(t)
+json.dump(d, open(sys.argv[2], "w"))
+PY
+export FAKE_BOARD="$scratch/board-tail.json"
+start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
+sleep 0.8
+check "done tail: last row is #5, done" "$(dump | field '[(r["id"], r["status"]) for r in d["rows"]]')" "[('3', 'doing'), ('6', 'todo'), ('7', 'todo'), ('5', 'done')]"
+tail_row="$(qs ipc -p "$root" call smoke row 5)"
+check "done tail: the row's title text" "$(field 'd["title"]' <<<"$tail_row")" "Closed one"
+check "done tail: the done glyph" "$(field 'd["glyph"] == chr(0xF0C52)' <<<"$tail_row")" "True"
+check "done tail: the delegate is visible" "$(field 'd["visible"] and d["opacity"] > 0 and d["height"] > 0' <<<"$tail_row")" "True"
+check "done tail: inside the rows viewport" "$(field 'd["inViewport"]' <<<"$tail_row")" "True"
+stop
 export FAKE_BOARD="$here/tests/fixtures/consumer/board-old-cli.json"
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8
