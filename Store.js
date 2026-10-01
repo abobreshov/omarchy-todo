@@ -92,19 +92,6 @@ function normalizeSync(sync) {
   return out
 }
 
-// The cli store re-reads every smallest enabled intervalSec while the panel
-// is open (PLAN A34b); 0 when no target is enabled.
-function smallestInterval(sync) {
-  var best = 0
-  var list = sync || []
-  for (var i = 0; i < list.length; i++) {
-    var t = list[i]
-    if (!t || !t.enabled || !(t.intervalSec > 0)) continue
-    if (best === 0 || t.intervalSec < best) best = t.intervalSec
-  }
-  return best
-}
-
 // `board --json` -> { ok, items, focus, streams, hasStreams, sync, stamp } or
 // the protocol error (E8) for a document this panel does not understand.
 // `stamp` is the change stamp's path (§3.10) as todocli publishes it, or

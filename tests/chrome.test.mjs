@@ -48,16 +48,16 @@ test("pillState: vertical bars show the icon only; the sync overlay replaces the
   assert.equal(v.glyph, G.doing);
   assert.equal(v.label, "");
   assert.equal(Chrome.pillState(pillInput({ items, maxChars: 0 })).label, "");
-  const failing = [{ name: "basecamp", enabled: true, lastOkAt: null, lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), intervalSec: 60, error: { kind: "offline", message: "m" } }];
+  const failing = [{ name: "obsidian", enabled: true, lastOkAt: null, lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), intervalSec: null, error: { kind: "offline", message: "m" } }];
   const one = Chrome.pillState(pillInput({ backend: "cli", items, sync: failing }));
   assert.equal(one.glyph, G.syncAlert);
   assert.equal(one.label, "Review PR");
   assert.equal(one.urgent, false);
-  assert.ok(one.tooltip.endsWith("\nBasecamp sync failed 12m ago"));
-  const two = Chrome.pillState(pillInput({ backend: "cli", items, sync: failing.concat([{ name: "obsidian", enabled: true, lastOkAt: null, lastAttemptAt: null, intervalSec: 5, error: { kind: "error", message: "m" } }]) }));
+  assert.ok(one.tooltip.endsWith("\nObsidian sync failed 12m ago"));
+  const two = Chrome.pillState(pillInput({ backend: "cli", items, sync: failing.concat([{ name: "other", enabled: true, lastOkAt: null, lastAttemptAt: null, intervalSec: null, error: { kind: "error", message: "m" } }]) }));
   assert.ok(two.tooltip.endsWith("\n2 syncs failed"));
   assert.equal(Chrome.pillState(pillInput({ backend: "json", items, sync: failing })).glyph, G.doing, "json mode has no overlay");
-  const disabled = [{ name: "basecamp", enabled: false, lastOkAt: null, lastAttemptAt: null, intervalSec: 60, error: { kind: "auth", message: "m" } }];
+  const disabled = [{ name: "obsidian", enabled: false, lastOkAt: null, lastAttemptAt: null, intervalSec: null, error: { kind: "auth", message: "m" } }];
   assert.equal(Chrome.pillState(pillInput({ backend: "cli", items, sync: disabled })).glyph, G.doing, "a disabled target does not fail");
   assert.equal(Chrome.pillState(pillInput({ backend: "cli", loaded: false, sync: failing })).glyph, G.icon, "no overlay on the loading state");
 });
@@ -65,42 +65,31 @@ test("pillState: vertical bars show the icon only; the sync overlay replaces the
 // ------------------------------------------------------------- footer
 test("UI-12 footer: the UX §4.7 table", () => {
   assert.deepEqual(Chrome.footer([], NOW, {}), { glyph: G.sync, text: "todocli · local only", urgent: false, tooltip: "", action: null });
-  assert.deepEqual(Chrome.footer([target("basecamp", { enabled: false })], NOW, {}).text, "todocli · local only");
-  const ok = Chrome.footer([target("basecamp"), target("obsidian", { lastOkAt: new Date(NOW - 5 * 60000).toISOString(), intervalSec: 5, lastAttemptAt: new Date(NOW - 5000).toISOString() })], NOW, {});
-  assert.deepEqual(ok, { glyph: G.sync, text: "todocli · synced 5m ago", urgent: false, tooltip: "Basecamp: ok 2m ago\nObsidian: ok 5m ago", action: null });
-  const never = Chrome.footer([target("basecamp", { lastOkAt: null, lastAttemptAt: null })], NOW, {});
+  assert.deepEqual(Chrome.footer([target("obsidian", { enabled: false })], NOW, {}).text, "todocli · local only");
+  const ok = Chrome.footer([target("other"), target("obsidian", { lastOkAt: new Date(NOW - 5 * 60000).toISOString(), intervalSec: null, lastAttemptAt: new Date(NOW - 5000).toISOString() })], NOW, {});
+  assert.deepEqual(ok, { glyph: G.sync, text: "todocli · synced 5m ago", urgent: false, tooltip: "Other: ok 2m ago\nObsidian: ok 5m ago", action: null });
+  const never = Chrome.footer([target("obsidian", { lastOkAt: null, lastAttemptAt: null })], NOW, {});
   assert.equal(never.text, "todocli · not synced yet · R sync now");
   assert.equal(never.action, "syncNow");
   assert.equal(never.urgent, false);
-  assert.deepEqual(Chrome.footer([target("basecamp")], NOW, { syncing: true }), { glyph: G.sync, text: "Syncing…", urgent: false, tooltip: "Basecamp: ok 2m ago", action: null });
-  const one = Chrome.footer([target("basecamp", { lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), error: { kind: "auth", message: "x" } })], NOW, {});
-  assert.deepEqual(one, { glyph: G.syncAlert, text: "Basecamp sync failed 12m ago · R retry", urgent: true, tooltip: "Basecamp: failed 12m ago — signed out. Run: basecamp auth login", action: "syncNow" });
-  const two = Chrome.footer([target("basecamp", { error: { kind: "offline", message: "x" } }), target("obsidian", { error: { kind: "vault_missing", message: "x" } })], NOW, {});
+  assert.deepEqual(Chrome.footer([target("obsidian")], NOW, { syncing: true }), { glyph: G.sync, text: "Syncing…", urgent: false, tooltip: "Obsidian: ok 2m ago", action: null });
+  const one = Chrome.footer([target("obsidian", { lastAttemptAt: new Date(NOW - 12 * 60000).toISOString(), error: { kind: "error", message: "could not write the note" } })], NOW, {});
+  assert.deepEqual(one, { glyph: G.syncAlert, text: "Obsidian sync failed 12m ago · R retry", urgent: true, tooltip: "Obsidian: failed 12m ago — could not write the note", action: "syncNow" });
+  const two = Chrome.footer([target("other", { error: { kind: "offline", message: "x" } }), target("obsidian", { error: { kind: "vault_missing", message: "x" } })], NOW, {});
   assert.equal(two.text, "2 syncs failed · R retry");
   assert.equal(two.urgent, true);
   assert.equal(two.glyph, G.syncAlert);
-  const stale = Chrome.footer([target("basecamp", { lastAttemptAt: new Date(NOW - 2 * 3600000).toISOString() })], NOW, {});
-  assert.deepEqual(stale, { glyph: G.syncOff, text: "Sync daemon idle since 2h ago · R sync now", urgent: false, tooltip: "Basecamp: ok 2m ago", action: "syncNow" });
-  const off = Chrome.footer([target("basecamp"), target("obsidian", { enabled: false })], NOW, {});
-  assert.equal(off.tooltip, "Basecamp: ok 2m ago\nObsidian: off");
+  const off = Chrome.footer([target("other"), target("obsidian", { enabled: false })], NOW, {});
+  assert.equal(off.tooltip, "Other: ok 2m ago\nObsidian: off");
   assert.equal(Chrome.footer(null, NOW, {}).text, "todocli · local only");
-  assert.equal(Chrome.footer([null, target("basecamp")], NOW, {}).tooltip, "Basecamp: ok 2m ago", "holes are skipped");
+  assert.equal(Chrome.footer([null, target("obsidian")], NOW, {}).tooltip, "Obsidian: ok 2m ago", "holes are skipped");
 });
 
 test("footer reasons follow the UX §4.7 kind table", () => {
-  const cases = {
-    auth: "signed out. Run: basecamp auth login",
-    auth_unreachable: "credentials not reachable from todocli.service; terminal sync still works",
-    list_gone: "synced list trashed or archived in Basecamp; nothing changed here",
-    offline: "offline or Basecamp unreachable; retrying",
-    rate_limited: "rate limited by Basecamp; retrying",
-    cli_missing: "basecamp CLI not found",
-    vault_missing: "vault folder not found",
-    write_failed: "could not write the note",
-  };
-  for (const [kind, copy] of Object.entries(cases)) assert.equal(Chrome.reason({ kind, message: "ignored" }), copy, kind);
-  assert.equal(Chrome.reason({ kind: "removals_held", message: "3 removals held" }), "3 removals held; review, then todocli sync basecamp --accept-remote-removals");
-  assert.equal(Chrome.reason({ kind: "removals_held", message: "" }), "removals held; review, then todocli sync basecamp --accept-remote-removals");
+  for (const message of ["vault folder not found", "could not write the note"])
+    assert.equal(Chrome.reason({ kind: "error", message }), message);
+  assert.equal(Chrome.reason({ kind: "removals_held", message: "3 removals held" }), "3 removals held");
+  assert.equal(Chrome.reason({ kind: "removals_held", message: "" }), "removals_held");
   assert.equal(Chrome.reason({ kind: "error", message: "first line of it\nsecond" }), "first line of it");
   assert.equal(Chrome.reason({ kind: "error", message: "x".repeat(80) }).length, 60);
   assert.equal(Chrome.reason({ kind: "error" }), "error");

@@ -7,7 +7,7 @@ A tiny checklist for the [Omarchy](https://omarchy.org/) bar. Add an item,
 read it, tick it done, pick the one you are working on and start a pomodoro
 for it. By default your data is a plain JSON file; with `backend = cli` every
 read and write goes through [`todocli`](https://github.com/abobreshov/productivity),
-so the same list shows up in Claude Code, Obsidian and Basecamp.
+so the same list shows up in Claude Code and Obsidian.
 
 Forked from https://github.com/tathagat11/omarchy-checklist-todo (MIT) by
 Tathagata Talukdar. Plugin id `abobreshov.todo`; the bar icon, the three
@@ -133,7 +133,7 @@ the database.
   names, `~/.local/state/todocli/changed` by default, and the panel watches
   that directory from the first successful read on — and the push
   `omarchy-shell -q abobreshov.todo refresh`), on `r`, on panel open, every
-  30 s in an error state and every sync interval while the panel is open.
+  30 s in an error state.
   The panel never watches the SQLite file.
 - Writes are optimistic and reverted with `Not saved — <reason>.` on failure;
   they are never retried automatically.
@@ -144,13 +144,13 @@ the database.
   own.
 - A failed `R` sync is a footer transient, never one of those errors: the
   panel reads the `kind` of todocli's `--json` envelope (`sync_held` → `Sync
-  already running.`, `removals_held` → `Sync held — <n> removals held; …`,
+  already running.`,
   `busy` → `Sync not started — database busy.`, any other kind → `Sync
-  failed — <reason>.` with the footer's own reason copy). The list stays
+  failed — <reason>.` with the message's first line). The list stays
   writable; only a binary that cannot run at all is E4.
 - The footer shows the sync state from `todocli board --json`'s `sync`
-  block: `todocli · synced 2m ago`, `Basecamp sync failed 12m ago · R retry`,
-  `Sync daemon idle since 2h ago · R sync now`.
+  block: `todocli · synced 2m ago`, `Obsidian sync failed 12m ago · R retry`,
+  `todocli · not synced yet · R sync now`.
 
 ## IPC
 

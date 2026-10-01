@@ -21,8 +21,7 @@ import "Argv.js" as Argv
 // the change signal (a directory watch on
 // the directory of the stamp the board document names, `stamp`, plus the
 // `refresh()` push), on `r`, on panel open,
-// every 30 s in an error state and every smallest enabled intervalSec while
-// the panel is open. In an error state the last list stays (`stale`) and
+// every 30 s in an error state. In an error state the last list stays (`stale`) and
 // mutators reply `unavailable`. Inactive (backend json) it spawns nothing
 // and watches nothing.
 TodoStore {
@@ -220,15 +219,6 @@ TodoStore {
     interval: 30000
     repeat: true
     running: store.active && store.error !== null
-    onTriggered: store.read()
-  }
-
-  // Every smallest enabled intervalSec while the panel is open, so the
-  // footer's `lastAttemptAt` and E10 stay live between stamps.
-  property Timer intervalRead: Timer {
-    interval: Math.max(1000, Store.smallestInterval(store.sync) * 1000)
-    repeat: true
-    running: store.active && store.opened && Store.smallestInterval(store.sync) > 0
     onTriggered: store.read()
   }
 

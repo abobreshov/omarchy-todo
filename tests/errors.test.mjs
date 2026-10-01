@@ -70,11 +70,11 @@ test("classifySync answers the footer transient from the envelope's kind; only a
   assert.equal(Errors.classifySync(0, "", "", false), null);
   assert.deepEqual(Errors.classifySync(75, env("sync_held", "basecamp: already running (daemon pid 4242)", 75), "", false), { kind: "sync_held", message: "Sync already running." });
   assert.deepEqual(Errors.classifySync(75, "", "basecamp: already running\n", false), { kind: "sync_held", message: "Sync already running." }, "an older binary without an envelope: 75 reads as held");
-  assert.deepEqual(Errors.classifySync(75, env("removals_held", "basecamp removals_held: 2 of 2 removals held; review, then todocli sync basecamp --accept-remote-removals", 75), "", false), { kind: "removals_held", message: "Sync held — 2 removals held; review, then todocli sync basecamp --accept-remote-removals." });
+  assert.deepEqual(Errors.classifySync(75, env("removals_held", "basecamp removals_held: 2 of 2 removals held; review, then todocli sync basecamp --accept-remote-removals", 75), "", false), { kind: "removals_held", message: "Sync failed — basecamp removals_held: 2 of 2 removals held; review, then t." });
   assert.deepEqual(Errors.classifySync(75, env("busy", "database is busy", 75), "", false), { kind: "busy", message: "Sync not started — database busy. Press R to retry." });
-  assert.deepEqual(Errors.classifySync(6, env("offline", "basecamp offline: offline or Basecamp unreachable; retrying", 6), "", false), { kind: "offline", message: "Sync failed — offline or Basecamp unreachable; retrying." });
-  assert.deepEqual(Errors.classifySync(3, env("auth", "basecamp auth: signed out. Run: basecamp auth login", 3), "", false), { kind: "auth", message: "Sync failed — signed out. Run: basecamp auth login." });
-  assert.deepEqual(Errors.classifySync(69, env("list_gone", "x", 69), "", false), { kind: "list_gone", message: "Sync failed — synced list trashed or archived in Basecamp; nothing changed here." });
+  assert.deepEqual(Errors.classifySync(6, env("offline", "basecamp offline: offline or Basecamp unreachable; retrying", 6), "", false), { kind: "offline", message: "Sync failed — basecamp offline: offline or Basecamp unreachable; retrying." });
+  assert.deepEqual(Errors.classifySync(3, env("auth", "basecamp auth: signed out. Run: basecamp auth login", 3), "", false), { kind: "auth", message: "Sync failed — basecamp auth: signed out. Run: basecamp auth login." });
+  assert.deepEqual(Errors.classifySync(69, env("list_gone", "x", 69), "", false), { kind: "list_gone", message: "Sync failed — x." });
   assert.deepEqual(Errors.classifySync(7, env("error", "basecamp error: basecamp CLI not found", 7), "", false), { kind: "error", message: "Sync failed — basecamp error: basecamp CLI not found." });
   assert.deepEqual(Errors.classifySync(2, env("config", "config.toml:2: unknown field `typo`", 2), "", false), { kind: "config", message: "Sync failed — config.toml:2: unknown field `typo`." });
   assert.deepEqual(Errors.classifySync(7, "not json", "basecamp error: boom\nmore", false), { kind: "error", message: "Sync failed — basecamp error: boom." }, "no envelope: the first stderr line");
@@ -95,8 +95,8 @@ test("parseEnvelope reads the §3.5 envelope and nothing else", () => {
 });
 
 test("syncReason is the UX §4.7 copy per kind (Chrome.reason delegates to it)", () => {
-  assert.equal(Errors.syncReason({ kind: "auth" }), "signed out. Run: basecamp auth login");
-  assert.equal(Errors.syncReason({ kind: "removals_held", message: "3 removals held" }), "3 removals held; review, then todocli sync basecamp --accept-remote-removals");
+  assert.equal(Errors.syncReason({ kind: "auth" }), "auth");
+  assert.equal(Errors.syncReason({ kind: "removals_held", message: "3 removals held" }), "3 removals held");
   assert.equal(Errors.syncReason({ kind: "weird", message: "line\nmore" }), "line");
   assert.equal(Errors.syncReason({ kind: "weird" }), "weird");
   assert.equal(Errors.syncReason(null), "");

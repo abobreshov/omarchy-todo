@@ -98,8 +98,8 @@ test("sync all through the fake: exit 0 re-reads; a failure is the footer transi
   const held = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "sync_held" });
   assert.deepEqual(Errors.classifySync(held.code, held.stdout, held.stderr, false), { kind: "sync_held", message: "Sync already running." });
   const removals = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "removals_held" });
-  assert.deepEqual(Errors.classifySync(removals.code, removals.stdout, removals.stderr, false), { kind: "removals_held", message: "Sync held — 2 removals held; review, then todocli sync basecamp --accept-remote-removals." });
+  assert.deepEqual(Errors.classifySync(removals.code, removals.stdout, removals.stderr, false), { kind: "removals_held", message: "Sync failed — basecamp removals_held: 2 of 2 removals held; review, then t." });
   const offline = runArgv(argv, { FAKE_EXIT: "6", FAKE_KIND: "offline" });
-  assert.deepEqual(Errors.classifySync(offline.code, offline.stdout, offline.stderr, false), { kind: "offline", message: "Sync failed — offline or Basecamp unreachable; retrying." });
+  assert.deepEqual(Errors.classifySync(offline.code, offline.stdout, offline.stderr, false), { kind: "offline", message: "Sync failed — basecamp offline: offline or Basecamp unreachable; retrying." });
   assert.equal(Errors.classifyExit(offline.code, offline.stderr, false).kind, "failed", "the same exit would be E7 for a read; syncs never use classifyExit");
 });

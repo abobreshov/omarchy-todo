@@ -84,19 +84,14 @@ function footer(sync, now, opts) {
     return { glyph: Model.G.syncAlert, text: Model.targetName(failing[0].name) + " sync failed " + Model.ago(failing[0].lastAttemptAt, now) + " · R retry", urgent: true, tooltip: tip, action: "syncNow" }
   if (failing.length > 1)
     return { glyph: Model.G.syncAlert, text: failing.length + " syncs failed · R retry", urgent: true, tooltip: tip, action: "syncNow" }
-  var stalest = null
   var oldestOk = null
   var never = false
   for (var i = 0; i < enabled.length; i++) {
     var t = enabled[i]
-    var attempt = Model.toMillis(t.lastAttemptAt)
-    if (!isNaN(attempt) && t.intervalSec > 0 && now - attempt > 3 * t.intervalSec * 1000 && (stalest === null || attempt < stalest)) stalest = attempt
     var ok = Model.toMillis(t.lastOkAt)
     if (isNaN(ok)) never = true
     else if (oldestOk === null || ok < oldestOk) oldestOk = ok
   }
-  if (stalest !== null)
-    return { glyph: Model.G.syncOff, text: "Sync daemon idle since " + Model.ago(stalest, now) + " · R sync now", urgent: false, tooltip: tip, action: "syncNow" }
   if (never)
     return { glyph: Model.G.sync, text: "todocli · not synced yet · R sync now", urgent: false, tooltip: tip, action: "syncNow" }
   return { glyph: Model.G.sync, text: "todocli · synced " + Model.ago(oldestOk, now), urgent: false, tooltip: tip, action: null }
