@@ -109,7 +109,7 @@ check "dump.backend json" "$(dump | field 'd["backend"]')" "json"
 # ---- cli mode against the fake todocli ------------------------------------
 qs ipc -p "$root" call smoke settings "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}" >/dev/null
 sleep 0.8
-check "AC-13.1 cli read shows the store" "$(dump | field 'd["open"]')" "[{'id': '3', 'title': 'Wire the webhook', 'status': 'doing'}]"
+check "AC-13.1 cli read shows the store" "$(dump | field 'd["open"]')" "[{'id': '3', 'title': 'Wire the webhook', 'status': 'doing', 'stream': 'inbox', 'horizon': 'short', 'labels': [], 'priority': None, 'size': None}]"
 check "dump.cliPath is the wrapper" "$(dump | field 'd["cliPath"]')" "$fake"
 # The fixture's lastAttemptAt is fixed, so the relative time is not.
 check "footer from the sync block" "$(dump | field 'd["footer"]["text"].startswith("Basecamp sync failed ") and d["footer"]["text"].endswith(" · R retry")')" "True"
