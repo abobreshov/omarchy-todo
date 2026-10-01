@@ -121,13 +121,18 @@ Item {
       compare(panel.currentTab,"s"); compare(panel.ui.picker,null)
       compare(panel.store.queue.length,0)
     }
-    // UX §24.1: the row mark's tone wiring (Priority.markTone on the value).
+    // UX §24.1: the row mark's tone wiring (Priority.markTone on the value
+    // and on isDone: a done row's mark is dim whatever its level).
     function test_row_mark_tones() {
-      panel.store.items=[task("4",{priority:80}),task("3",{priority:100}),task("5",{priority:50})]
+      panel.store.items=[task("4",{priority:80}),task("3",{priority:100}),task("5",{priority:50}),
+        task("6",{priority:100,status:"done",completedAt:"2026-10-01T10:00:00.000Z"})]
       wait(30)
       compare(String(findChild(panel,"rowPriorityMark_4").color),String(panel.contentForeground))
       compare(String(findChild(panel,"rowPriorityMark_3").color),String(Color.urgent))
       compare(String(findChild(panel,"rowPriorityMark_5").color),String(panel.dimForeground))
+      var doneMark=findChild(panel,"rowPriorityMark_6")
+      verify(doneMark!==null)
+      compare(String(doneMark.color),String(panel.dimForeground))
     }
     function test_detail_mark_tones_and_fixed_footer() {
       panel.store.items=[task("4",{priority:100}),task("3",{priority:100,status:"done"})]
