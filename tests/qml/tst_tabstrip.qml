@@ -18,6 +18,7 @@ Item {
   TestCase {
     name: "TabStrip"; when: windowShown
     function init() {
+      failOnWarning(/Binding loop detected/)   // TabStrip.layout's write-back (2.1.2)
       fakePanel.ui = Object.assign({}, fakePanel.ui, {view:"list",moving:null})
       fakePanel.currentTab = "overview"
       fakePanel.stripFirst = 1

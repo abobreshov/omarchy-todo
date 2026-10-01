@@ -30,6 +30,7 @@ Item {
     }
     function cleanup() { scrollList.visible=false }
     function init() {
+      failOnWarning(/Binding loop detected/)   // TabStrip.layout's write-back (2.1.2)
       panel.close()
       panel.store.active=false
       panel.store.error=null
@@ -138,14 +139,20 @@ Item {
       var ind=findChild(panel,"indicatorRight"), first=panel.stripFirst
       verify(ind.visible); verify(ind.hidden>0)
       var nearest=panel.tabs[panel.strip.last+2].uid
-      mouseClick(ind,ind.width/2,ind.height/2)
-      compare(panel.currentTab,"overview"); compare(panel.stripFirst,first)
-      compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
-      compare(panel.store.queue.length,0)
-      // The same click with the picker closed reaches the nearest hidden tab.
-      panel.dispatch({type:"esc"}); compare(panel.ui.picker,null)
-      mouseClick(ind,ind.width/2,ind.height/2)
-      compare(panel.currentTab,nearest)
+      try {
+        mouseClick(ind,ind.width/2,ind.height/2)
+        compare(panel.currentTab,"overview"); compare(panel.stripFirst,first)
+        compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+        compare(panel.store.queue.length,0)
+        // The same click with the picker closed reaches the nearest hidden tab.
+        panel.dispatch({type:"esc"}); compare(panel.ui.picker,null)
+        mouseClick(ind,ind.width/2,ind.height/2)
+        compare(panel.currentTab,nearest)
+      } finally {
+        // Back to the Overview: the next test's init drops these streams and
+        // must not start on a tab that no longer exists.
+        panel.currentTab="overview"; wait(30)
+      }
     }
     // UX §24.3 (hover is ignored while picking) and 4.1: under a picker a tab
     // shows no hover fill and no tooltip, nor does the overflow indicator,

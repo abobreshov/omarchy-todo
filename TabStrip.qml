@@ -21,10 +21,15 @@ Item {
   readonly property int highlightedIndex: windowTabs.map(function(t) { return t.uid }).indexOf(highlighted)
   readonly property var layout: Tabs.stripLayout(widths, 1, highlightedIndex, windowBudget(), panel.stripFirst)
   height: Style.space(28)
+  // The window's first tab goes back to the panel on the next turn: written
+  // here, inside the layout binding's own update, it re-ran that binding (a
+  // binding loop on every window move). The re-run keeps the same window, as
+  // stripLayout keeps a first that already shows the highlighted tab.
   onLayoutChanged: {
-    if (panel.stripFirst !== layout.first) panel.stripFirst = layout.first
     panel.strip = layout
+    if (panel.stripFirst !== layout.first) Qt.callLater(strip.rememberFirst)
   }
+  function rememberFirst() { if (panel.stripFirst !== layout.first) panel.stripFirst = layout.first }
   FontMetrics { id: metrics; font.family: strip.panel.contentFontFamily; font.pixelSize: Style.font.caption }
   function tabWidth(t) {
     if (t.key === "inbox" || t.key === "done") return iconWidth
