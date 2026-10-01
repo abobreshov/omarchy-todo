@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-01
+
+### Fixed
+
+- The done tail drew an empty row. The list's rows area was shorter than its
+  rows by the height of the hidden key-help line, so the last row (on a board
+  with a task done today, that task) was clipped out of view and left a blank
+  slot above the footer, in every list view. The rows area now leaves room
+  for the help line only while it is shown.
+
 ## [2.1.0] - 2026-10-01
 
 ### Added
@@ -181,7 +191,8 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
 - Every monitor's bar stays in sync via a directory watch.
 - Standard Omarchy bar-widget behaviour: move/reorder, enable/disable, hot reload.
 
-[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/abobreshov/omarchy-todo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/abobreshov/omarchy-todo/compare/v1.0.0...v2.0.0
 [1.0.0]: https://github.com/tathagat11/omarchy-checklist-todo/releases/tag/v1.0.0
