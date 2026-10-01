@@ -94,7 +94,7 @@ test("sync all through the fake: exit 0 re-reads; a failure is the footer transi
   const ok = runArgv(argv);
   assert.equal(ok.code, 0);
   assert.equal(Errors.classifySync(ok.code, ok.stdout, ok.stderr, ok.spawnFailed), null);
-  assert.equal(JSON.parse(ok.stdout).basecamp.todolist_id, null, "the real reply's basecamp is an object");
+  assert.equal(JSON.parse(ok.stdout).targets.length, 1, "the real reply names the one target (D18)");
   const held = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "sync_held" });
   assert.deepEqual(Errors.classifySync(held.code, held.stdout, held.stderr, false), { kind: "sync_held", message: "Sync already running." });
   const removals = runArgv(argv, { FAKE_EXIT: "75", FAKE_KIND: "removals_held" });

@@ -28,13 +28,13 @@ const fake = path.join(here, "fakebin", "todocli");
 // sha256 of every vendored golden; todocli's tests/contract.rs regenerates
 // them and fails when a sibling checkout's copy differs.
 const PINS = {
-  "board.json": "a2afa400e35e8094027307a76f9e4e425f8cb0f9302be1405765e8db444061da",
+  "board.json": "75ede613ca3e18ae05655977338be9f39bdc060af34e0457e75345634e0b2769",
   "envelope-auth.json": "df0146f24ce4d920f1a3553f1bf5c0c99be3b3a0cd09e78be9e4ec5ca5888373",
   "envelope-auth_unreachable.json": "c37cf36963da0cce37bdd78a18b66d391eddd20ecb2c5585bde0cf25f8e6dcb0",
   "envelope-busy.json": "2b817a4aed957e7e460762f5da85d4ca1ed25d1b85ba6a3b00184008665e6d45",
   "envelope-config.json": "043210cdb08627d90231f9dd87cd091f366746e962fcf92a2b7e5ce275c8118f",
   "envelope-db.json": "96cc984b92416f107f9d8df71ca9e94f2f01a1f42bc77a2e297b16e12ee96044",
-  "envelope-error.json": "d2cc3973c8d6a14ca2ea4c16ccfa1110325b337e1251153c8b2639581edcede7",
+  "envelope-error.json": "659a79cf76680513b3dad6c304510af5126f00206d922b76a2acbdfe354abee9",
   "envelope-list_gone.json": "35e6ff69863f525f50b07a367a36ad4223122cea7acd1703c288f2b6944a0aed",
   "envelope-not_found.json": "2d290b09b6d41b6d54eae5afc835516c804069af8b3b18f84a76d5bafc4ed2b8",
   "envelope-offline.json": "561e945616d7e736382e4b85ae6dacdd2d02b627dbf0a3a90cc8be00b1b02a77",
@@ -48,7 +48,7 @@ const PINS = {
   "pomodoro-interrupt.json": "b7dcfcbbf95a23ee59bdb561e26967181d9ffc9c2b715f728ff8130a5cea68db",
   "pomodoro-retarget.json": "26a560cea71bc863a2d2a0e56cb407a1924bde3a94ae7804d8e186aefa87ad99",
   "pomodoro-start.json": "a553305b029ad90ee0b1903e5b2bcd9d9e886f519032b0510a35772e1a7989c2",
-  "sync-all.json": "259f2bb2b31b85fc877ba005dcfe211719f7636c935f54ff0d6fccf7b0e0ab74",
+  "sync-all.json": "c333d520c5d7c5c5570e8f47975d657026619a672664876d75cb07dae87c1f68",
   "write-add.json": "b040aa1f72f0818982eb5463f5fded4a4937ffad8aa5bfd1ac37deb6999b32e8",
   "write-done.json": "624a60cdf8eaf62ea84fb6dc6322b23bc4176ec5b77421bc6c533b6e1e26dad7",
   "write-focus-clear.json": "3368ea498e9490c52f7abc4589f078bdab156aa1c313e44706a2bbe4a005b39f",
@@ -80,7 +80,7 @@ test("the goldens are the shapes this panel parses: the board, every write reply
   assert.equal(board.ok, true);
   assert.deepEqual(board.items.map((t) => [t.id, t.name, t.status]), [["3", "Wire the webhook", "doing"], ["5", "Closed one", "done"]]);
   assert.deepEqual(board.focus, { text: "Ship the invoice-export slice", taskId: "3" });
-  assert.deepEqual(board.sync.map((t) => t.name), ["obsidian", "basecamp"]);
+  assert.deepEqual(board.sync.map((t) => t.name), ["obsidian"], "one target since todocli S10-1 (D18)");
   assert.equal(board.stamp, "$STATE_DIR/changed", "the stamp path, normalised by the generator");
   for (const verb of ["add", "start", "done", "reopen", "step", "rm"]) {
     const reply = JSON.parse(golden("write-" + verb + ".json"));
@@ -92,9 +92,9 @@ test("the goldens are the shapes this panel parses: the board, every write reply
   assert.deepEqual(JSON.parse(golden("write-focus-clear.json")), { focus: null, focus_task: null }, "--clear clears the statement and the link (todocli 07988ed)");
   assert.equal(Queue.rememberId({}, "tmp", golden("write-focus-task.json")).tmp, undefined, "a focus reply names no task to map");
   const sync = JSON.parse(golden("sync-all.json"));
-  assert.equal(typeof sync.basecamp, "object");
-  assert.notEqual(sync.basecamp, null, "basecamp is an object even with the target off");
-  assert.deepEqual(sync.targets.map((t) => t.name), ["obsidian", "basecamp"]);
+  assert.deepEqual(Object.keys(sync), ["targets"], "no basecamp object (D27)");
+  assert.deepEqual(sync.targets.map((t) => t.name), ["obsidian"]);
+  assert.deepEqual(Object.keys(sync.targets[0]), ["name", "enabled", "lastOkAt", "lastAttemptAt", "intervalSec", "error", "state", "hint", "notices"], "no counters (D27)");
   const kinds = fs.readdirSync(dir).filter((f) => f.startsWith("envelope-")).map((f) => f.slice("envelope-".length, -".json".length)).sort();
   assert.deepEqual(kinds, ["auth", "auth_unreachable", "busy", "config", "db", "error", "list_gone", "not_found", "offline", "rate_limited", "refused", "removals_held", "sync_held", "usage"], "the frozen kind vocabulary");
   for (const kind of kinds) {
@@ -190,7 +190,7 @@ test("the real todocli under an isolated environment prints the shapes the golde
   assert.equal(doc.ok, true);
   assert.deepEqual(doc.items, [], "the removed task is gone");
   assert.equal(Store.stampDir(doc.stamp), path.join(root, "xdg", "state", "todocli") + "/", "the stamp lives in the isolated state dir");
-  assert.deepEqual(doc.sync.map((s) => s.name), ["obsidian", "basecamp"]);
+  assert.deepEqual(doc.sync.map((s) => s.name), ["obsidian"]);
   const sync = run({ type: "syncNow" });
   assert.equal(sync.code, 0, sync.stderr);
   assert.deepEqual(shape(sync.stdout), shape(golden("sync-all.json")));
