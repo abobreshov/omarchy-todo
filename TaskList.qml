@@ -73,7 +73,9 @@ Column {
     objectName: "todoRows"
     visible: list.listShown
     width: parent.width
-    height: Math.min(contentHeight, Math.max(0, list.maxHeight - pinned.implicitHeight - help.implicitHeight - 2 * list.spacing))
+    // help.height, as desiredHeight counts it: a hidden help line keeps its
+    // implicitHeight, and subtracting that clipped the last row (2.1.1).
+    height: Math.min(contentHeight, Math.max(0, list.maxHeight - pinned.implicitHeight - help.height - 2 * list.spacing))
     contentWidth: width; contentHeight: content.implicitHeight
     clip: true; boundsBehavior: Flickable.StopAtBounds
     interactive: contentHeight > height && !list.panel.wheelLatched
