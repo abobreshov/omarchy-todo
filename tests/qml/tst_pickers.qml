@@ -121,6 +121,14 @@ Item {
       compare(panel.currentTab,"s"); compare(panel.ui.picker,null)
       compare(panel.store.queue.length,0)
     }
+    // UX §24.1: the row mark's tone wiring (Priority.markTone on the value).
+    function test_row_mark_tones() {
+      panel.store.items=[task("4",{priority:80}),task("3",{priority:100}),task("5",{priority:50})]
+      wait(30)
+      compare(String(findChild(panel,"rowPriorityMark_4").color),String(panel.contentForeground))
+      compare(String(findChild(panel,"rowPriorityMark_3").color),String(Color.urgent))
+      compare(String(findChild(panel,"rowPriorityMark_5").color),String(panel.dimForeground))
+    }
     function test_detail_mark_tones_and_fixed_footer() {
       panel.store.items=[task("4",{priority:100}),task("3",{priority:100,status:"done"})]
       panel.store.sync=[{name:"obsidian",enabled:false,lastOkAt:null,lastAttemptAt:null,intervalSec:null,error:null}]

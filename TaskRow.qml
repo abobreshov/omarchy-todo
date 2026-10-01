@@ -147,6 +147,7 @@ Item {
     width: row.prioritySlot ? Style.space(12) : 0
     height: Style.space(24)
     Text {
+      objectName: "rowPriorityMark_" + row.itemData.id
       anchors.centerIn: parent
       text: row.prioritySlot ? row.priorityMark : ""
       readonly property string tone: Priority.markTone(row.priorityValue, row.isDone)
