@@ -98,7 +98,7 @@ Item {
     function test_inbox_only_done_tail_is_drawn() {
       load(Board.board())
       compare(panel.stripShown, false)
-      compare(Order.dayKey(panel.viewDayStart), "2026-10-01")
+      compare(Order.dayKey(panel.viewDayStart), Order.dayKey(Order.dayStartOf(top.now)), "the view day is the clock's local day in any zone")
       compare(ids(), ["12", "7", "8", "9", "13"].concat(tail()))
       compare(ids()[5], "11")
       allDrawn()
@@ -108,6 +108,12 @@ Item {
       wait(50); waitForRendering(top)
       allDrawn()
       panel.dispatch({ type: "key", key: "?" })
+    }
+    // The Done tab sits in the same rows viewport: its last row was clipped too.
+    function test_done_tab_rows_are_drawn() {
+      load(Board.board([Board.INBOX, work], null, null, { "11": "work: a" }), "done")
+      compare(panel.tabKey, "done")
+      allDrawn()
     }
     function test_stream_tab_done_tail_is_drawn() {
       load(Board.board([Board.INBOX, work], "work: a"), "s1")
