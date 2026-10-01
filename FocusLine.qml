@@ -31,7 +31,7 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     size: Style.space(24)
     opacity: line.hovered ? 1 : 0
-    enabled: line.hovered && !line.panel.errored
+    enabled: line.hovered && !line.panel.errored && !line.panel.ui.picker
     foreground: line.dim
     hoverColor: Color.accent
     fontFamily: line.family

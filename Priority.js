@@ -29,6 +29,11 @@ function markOf(value) {
   var i = NAMES.indexOf(levelOf(value))
   return i < 0 ? "" : MARKS[i]
 }
+function markTone(value, done) {
+  var level = levelOf(value)
+  if (done) return "dim"
+  return level === "critical" ? "urgent" : level === "high" ? "fg" : "dim"
+}
 
 // IPC/compose tokens have a separate domain from stored numeric values.
 function parse(input) {

@@ -149,7 +149,8 @@ Item {
     Text {
       anchors.centerIn: parent
       text: row.prioritySlot ? row.priorityMark : ""
-      color: row.isDone || row.priorityLevel === "low" || row.priorityLevel === "medium" ? row.dim : row.priorityLevel === "critical" ? Color.urgent : row.fg
+      readonly property string tone: Priority.markTone(row.priorityValue, row.isDone)
+      color: tone === "urgent" ? Color.urgent : tone === "fg" ? row.fg : row.dim
       font.family: row.family; font.pixelSize: Style.font.body
     }
     HoverHandler { id: priorityHover }

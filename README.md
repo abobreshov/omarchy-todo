@@ -207,13 +207,13 @@ rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 
 ## Development
 
-All logic lives in fourteen `.pragma library` files, one concern each; the QML
+All logic lives in sixteen `.pragma library` files, one concern each; the QML
 files bind and forward.
 
 | Library | Holds |
 | --- | --- |
 | `Model.js` | The fifteen-field item model (including stream, labels, horizon, priority, size and completedAt), the catalogue normaliser, glyphs, settings, text/time formatting and the focus link. |
-| `Priority.js` | Strict document priority/size normalisers and the contract's level, size and horizon constants. |
+| `Priority.js` | Strict document normalisers (`normalize`, `normalizeSize`), the IPC/compose parsers (`parse`, `parseSize`), levels, marks and mark tones, the metadata copy (`priorityText`, `sizeText`, `fieldsLine`, `resultMessage`) and the contract's level, size and horizon constants. |
 | `Store.js` | The json document (version 2, reads version 1), `board --json` metadata/catalogue mapping and capability detection, sync block and `reduce(doc, action)`, including move, priority and size writes. |
 | `Queue.js` | The cli store's ordering rules, rollback rebase and optimistic id map and write-reply codec. |
 | `Errors.js` | The cli error kinds (E4, E5, E7, E8) in one table: `classifyExit`, `unavailable`, `errorView`, `msgNotSaved`. |
@@ -221,6 +221,8 @@ files bind and forward.
 | `Chrome.js` | The pill and the sync footer. |
 | `Pomodoro.js` | The hand-off: `pomodoroIntent`, `pomodoroMessage`, `classifyShell`, `pomodoroView`. |
 | `Keys.js` | `keyAction` (the key map) and `reduceUi` (the view machine: list, compose, detail, error, cursor, armed delete). |
+| `Pickers.js` | The priority and size picker mode: `options`, `labels`, `current`, the E30 copy, the help lines and `reduce(ui, event, ctx)` (entry and refusals, choice, digits, Enter/Space/Esc, the mode's end on lifecycle events). |
+| `RowActions.js` | The row's right cluster (`rowActions`: plan progress, the focus/pomodoro/{del} slots, the armed caption) and the delete copy; `View.rowActions` forwards to it. |
 | `Order.js` | Status/priority/horizon/id comparators (doing first), tick-time peer snapshots, session-map translation/pruning, completion order and local calendar-day windows (`DONE_DAYS = 7`). |
 | `Tabs.js` | Active tabs, labels and resolution, clamped navigation and move targets by uid, whole-tab windows, angle/pixel wheel accumulators. |
 | `Streams.js` | Grouped Overview, stream blocks and sections, done tails, Done-tab day rows, filter/count/empty copy and document-wide slots. |

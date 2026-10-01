@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import qs.Commons
 import "../.." as Todo
 import "../../Model.js" as Model
 import "../../Argv.js" as Argv
@@ -38,6 +39,7 @@ Item {
       panel.store.items=[task("4",{priority:80}),task("3",{priority:0,size:"M"})]
       panel.store.focus={text:"",taskId:null}
       panel.store.queue=[]
+      panel.store.sync=[]
       panel.store.pending={action:{}}
       panel.store.writeProc.running=false
       panel.open()
@@ -73,6 +75,49 @@ Item {
       panel.dispatch({type:"esc"})
       panel.toggleStepAt(1)
       compare(panel.store.queue.length,1); compare(panel.detailItem.plan[0].done,true)
+    }
+    function ghostWithTip(item, tip) {
+      if (item.tooltipText === tip) return item
+      for (var i=0;i<item.children.length;i++) {
+        var found=ghostWithTip(item.children[i],tip)
+        if (found) return found
+      }
+      return null
+    }
+    function test_focus_ghosts_are_inert_under_picker() {
+      panel.store.focus={text:"Task 3",taskId:"3"}
+      wait(30)
+      panel.dispatch({type:"hover",index:panel.firstRow})
+      panel.dispatch({type:"key",key:"!"})
+      panel.dispatch({type:"key",key:"]"})
+      for (var tip of ["Start pomodoro (p)","Clear focus (f)"]) {
+        var ghost=ghostWithTip(focusLine,tip)
+        verify(ghost!==null)
+        var point=ghost.mapToItem(focusLine,ghost.width/2,ghost.height/2)
+        mouseMove(focusLine,point.x,point.y); wait(100)
+        verify(focusLine.hovered)
+        mouseClick(focusLine,point.x,point.y)
+        compare(panel.store.queue.length,0)
+        compare(panel.store.focus.taskId,"3"); compare(panel.store.focus.text,"Task 3")
+        compare(panel.ui.picker.id,"4"); compare(panel.ui.picker.choice,100)
+      }
+    }
+    function test_detail_mark_tones_and_fixed_footer() {
+      panel.store.items=[task("4",{priority:100}),task("3",{priority:100,status:"done"})]
+      panel.store.sync=[{name:"obsidian",enabled:false,lastOkAt:null,lastAttemptAt:null,intervalSec:null,error:null}]
+      panel.openDetail("4"); wait(30)
+      compare(String(findChild(panel,"detailPriorityMark").color),String(Color.urgent))
+      var actualFooter=findChild(panel,"detailStatusFooter")
+      verify(actualFooter.visible)
+      var height=actualFooter.height
+      verify(height>=Style.space(22))
+      panel.dispatch({type:"key",key:"!"}); wait(30)
+      compare(actualFooter.height,height)
+      assertFooterFits("detailStatusFooter")
+      panel.dispatch({type:"esc"}); wait(30)
+      compare(actualFooter.height,height)
+      panel.openDetail("3"); wait(30)
+      compare(String(findChild(panel,"detailPriorityMark").color),String(panel.dimForeground))
     }
     function test_real_footer_click_and_E25_rollback() {
       panel.dispatch({type:"key",key:"!"})

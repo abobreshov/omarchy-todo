@@ -33,6 +33,13 @@ test("Q-S24 bands, glyphs, zero and unset share one derivation", () => {
   }
 });
 
+test("mark tones follow UX §24.1, with every done mark dim", () => {
+  for (const [value, tone] of [[null, "dim"], [0, "dim"], [37, "dim"], [38, "dim"], [62, "dim"], [63, "fg"], [87, "fg"], [88, "urgent"], [100, "urgent"]]) {
+    assert.equal(Priority.markTone(value, false), tone);
+    assert.equal(Priority.markTone(value, true), "dim");
+  }
+});
+
 
 test('metadata copy is shared by tooltips, fields and result messages', () => {
   for (const [value,text] of [[null,'priority: (none)'],[0,'priority: low (0)'],[80,'priority: high (80)']])

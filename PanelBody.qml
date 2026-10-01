@@ -92,6 +92,8 @@ KeyboardPanel {
           objectName: "detailStatusFooter"
           visible: root.host.ui.view !== "compose" && ((root.host.footerModel !== null && root.host.ui.view !== "error") || root.host.message !== "" || root.host.ui.picker !== null)
           width: parent.width
+          implicitHeight: Style.space(24)
+          height: implicitHeight
           panel: root.host
         }
       }

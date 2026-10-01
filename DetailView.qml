@@ -99,7 +99,8 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       width: view.hasItem && view.item.priority !== null ? Style.space(12) : 0
       text: view.hasItem ? Priority.markOf(view.item.priority) : ""
-      color: view.dim
+      readonly property string tone: Priority.markTone(view.hasItem ? view.item.priority : null, view.hasItem && view.item.status === "done")
+      color: tone === "urgent" ? Color.urgent : tone === "fg" ? view.fg : view.dim
       font.family: view.family
       font.pixelSize: Style.font.body
     }
