@@ -1,4 +1,4 @@
-// CONTRACT-S9 revision 6, §§12.1–12.3: canonical producer bytes and permanent
+// CONTRACT-S9 revision 7, §§12.1–12.3: canonical producer bytes and permanent
 // consumer inputs; historical consumer bytes survive the canonical switch.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -15,8 +15,12 @@ const read = (dir, file) => fs.readFileSync(path.join(root, dir, file), "utf8");
 const json = (dir, file) => JSON.parse(read(dir, file));
 const seed = json("contract", "board-streams.json");
 const expected = json("consumer", "expected.json");
-// The SHA-pinned old-CLI input carries the pre-D18 sync block; consumer
-// fixtures retain it by §12.3, while canonical producer boards have one target.
+// The consumer boards keep the pre-D18 two-entry sync block (obsidian and a
+// disabled basecamp): board-old-cli.json is today's pre-S9 board, which still
+// prints both targets, and archived-home, empty-stream and ties were written
+// with the provisional seed in P0, before D18. §12.3 defines archived-home and
+// empty-stream as "§3.1 with …", and §3.1 has one target: an SD-17 item for
+// the foreman. Until consumer/ may change, those two compare against consumerSeed.
 const consumerSeed = { ...seed, sync: json("consumer", "board-old-cli.json").sync };
 const OLD_CLI_SHA256 = "a2afa400e35e8094027307a76f9e4e425f8cb0f9302be1405765e8db444061da";
 const NOW = "2026-09-29T09:10:11.561Z";
