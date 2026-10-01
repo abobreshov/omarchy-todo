@@ -216,7 +216,7 @@ files bind and forward.
 | Library | Holds |
 | --- | --- |
 | `Model.js` | The fifteen-field item model (including stream, labels, horizon, priority, size and completedAt), the catalogue normaliser, glyphs, settings, text/time formatting and the focus link. |
-| `Priority.js` | Strict document normalisers (`normalize`, `normalizeSize`), the IPC/compose parsers (`parse`, `parseSize`), levels, marks and mark tones, the metadata copy (`priorityText`, `sizeText`, `fieldsLine`, `resultMessage`) and the contract's level, size and horizon constants. |
+| `Priority.js` | Strict document normalisers (`normalize`, `normalizeSize`), the IPC/compose parsers (`parse`, `parseSize`), levels, marks and mark tones, the metadata copy (`priorityText`, `sizeText`, `fieldsLine`, `resultMessage`), the E31/E32 refusal copy (`unavailable`) and the contract's level, size and horizon constants. |
 | `Store.js` | The json document (version 2, reads version 1), `board --json` metadata/catalogue mapping and capability detection, sync block and `reduce(doc, action)`, including move, priority and size writes. |
 | `Queue.js` | The cli store's ordering rules, rollback rebase and optimistic id map and write-reply codec. |
 | `Errors.js` | The cli error kinds (E4, E5, E7, E8) in one table: `classifyExit`, `unavailable`, `errorView`, `msgNotSaved`. |
@@ -232,10 +232,14 @@ files bind and forward.
 | `Cursor.js` | Selectable rows, identity anchoring and temporary-id translation, minimal scroll adjustment. |
 | `Argv.js` | The argv builders for `todocli`, `omarchy-shell` and `install`. |
 
-Libraries import each other with `.import "X.js" as X` (Model ← Store ←
-Errors ← View ← Pomodoro; Queue uses Store; Chrome uses Model, Errors and View;
-Keys uses Model and View; Argv uses Model), and
-`tests/qml-js-loader.mjs` resolves the same lines under Node.
+Libraries import each other with `.import "X.js" as X` (Priority imports
+nothing; Model uses Priority; Errors, Argv and RowActions use Model; Store uses
+Model, Priority and Errors; Queue uses Store; Cursor uses Queue; Order and
+Pickers use Model, Priority and Queue; Tabs uses Model, Order and Priority;
+Streams uses Model, Order and Tabs; View uses Model, Streams, Tabs, Pickers and
+RowActions; Chrome and Pomodoro use Model, Errors and View; Keys uses Model,
+View, Tabs, Cursor, Streams and Pickers), and `tests/qml-js-loader.mjs`
+resolves the same lines under Node.
 `Store.reduce(doc, action)` is the one mutation API: the keys emit an action
 (`add`, `setStatus`, `focus`, `toggleStep`, `remove`), `Argv.forAction` maps
 it to a `todocli` command and both stores apply it through

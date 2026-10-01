@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Streams in a tab strip with Overview and Inbox, grouped tasks in Overview,
   and a move mode for sending a task to another stream.
+- Side-scroll and Shift+wheel switch one tab per gesture; `[`, `]` and `0`-`9`
+  choose tabs from the keyboard.
 - A Done tab for the last seven local calendar days. Stream views keep tasks
   completed today in their block's tail; the day is sampled when the panel opens.
+  A task reopened from the Done tab keeps its place until the panel closes.
 - Horizon sections and filtering, with a badge for a task's horizon or size.
 - Priority marks and size chips, with keyboard and mouse pickers. Zero is a
   set priority, and done marks stay dim.
@@ -28,14 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The sync footer follows the one Obsidian target after Basecamp sync cleanup.
+- The cursor stays on its task through reads and optimistic writes.
 - Stream controls need the S9 CLI's `streams` catalogue; an older CLI keeps
   today's list. The real-binary contract test runs only with an absolute
   `TODOCLI_BIN`, explicitly requested by the engineer.
 
 ### Fixed
 
-- Focus-line ghosts ignore clicks while a picker is open; detail priority
-  marks use the row's colours, and the detail footer keeps a fixed height.
+- Focus-line ghosts and the tab strip ignore clicks while a picker is open;
+  detail priority marks use the row's colours, and the detail footer keeps a
+  fixed height.
 
 ## [2.0.0]
 
