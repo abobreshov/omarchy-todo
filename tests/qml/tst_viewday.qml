@@ -7,7 +7,10 @@ import "../../Model.js" as Model
 Item {
   id: top
   width: 420; height: 520
-  property double now: Date.parse("2026-09-30T23:59:50+01:00")
+  // Ten seconds either side of 1 October's local midnight, in the runner's
+  // zone: a fixed instant crossed a day only where it was local midnight.
+  readonly property double midnight: new Date(2026, 9, 1).getTime()
+  property double now: midnight - 10000
   Todo.Panel {
     id: panel
     clock: function() { return top.now }
@@ -19,7 +22,8 @@ Item {
       compare(panel.viewDayStart,Order.dayStartOf(top.now))
       panel.open()
       var day=panel.viewDayStart
-      top.now=Date.parse("2026-10-01T00:00:10+01:00")
+      top.now=top.midnight+10000
+      verify(Order.dayStartOf(top.now)!==day)
       panel.clockNow=top.now
       panel.refresh()
       panel.dispatch({type:"tick"})

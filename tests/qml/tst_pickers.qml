@@ -190,10 +190,13 @@ Item {
       }
     }
     // UX §24.1: the row mark's tone wiring (Priority.markTone on the value
-    // and on isDone: a done row's mark is dim whatever its level).
+    // and on isDone: a done row's mark is dim whatever its level). #6 is done
+    // at the panel clock's now, so it is in today's tail in any time zone: a
+    // fixed instant an hour earlier fell on the previous day in Pacific/Auckland,
+    // where the clock reads midnight.
     function test_row_mark_tones() {
       panel.store.items=[task("4",{priority:80}),task("3",{priority:100}),task("5",{priority:50}),
-        task("6",{priority:100,status:"done",completedAt:"2026-10-01T10:00:00.000Z"})]
+        task("6",{priority:100,status:"done",completedAt:new Date(top.now).toISOString()})]
       wait(30)
       compare(String(findChild(panel,"rowPriorityMark_4").color),String(panel.contentForeground))
       compare(String(findChild(panel,"rowPriorityMark_3").color),String(Color.urgent))
