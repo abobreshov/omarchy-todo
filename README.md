@@ -9,7 +9,7 @@ for it. By default your data is a plain JSON file; with `backend = cli` every
 read and write goes through [`todocli`](https://github.com/abobreshov/productivity),
 so the same list shows up in Claude Code and Obsidian.
 
-**Version 2.1.1.** Stream views need the S9 `todocli`: `board --json` with
+**Version 2.1.2.** Stream views need the S9 `todocli`: `board --json` with
 `streams`. With an older `todocli`, the panel degrades to today's list.
 
 Forked from https://github.com/tathagat11/omarchy-checklist-todo (MIT) by

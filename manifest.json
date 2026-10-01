@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "abobreshov.todo",
   "name": "Checklist Todo",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "author": "abobreshov",
   "license": "MIT",
   "description": "A tiny todo list in the Omarchy bar with a focus, doing/done states, plan steps and notes; keeps its own JSON file or reads and writes through todocli.",

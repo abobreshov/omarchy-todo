@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-01
+
+### Fixed
+
+- The list card left a spare gap under its rows while the key-help line was
+  hidden: it counted the gap above that line whether or not the line was
+  shown. It now counts one gap above the rows and a second only above a shown
+  help line, and the rows area takes the rest, so every row still fits.
+- Each move of the tab strip's window (a tab chosen past its edge) logged a
+  QML binding loop on the strip's layout. The window's first tab now goes
+  back to the panel on the next turn; the window itself moves as before.
+
+### Changed
+
+- QML tests no longer depend on the time zone: the row-mark case's done task
+  is done at the panel clock's time (a fixed instant fell on the previous day
+  in Pacific/Auckland), and the view-day case crosses local midnight in any
+  zone. The overflow-indicator case returns to the Overview, and the picker
+  and tab-strip cases fail on a binding-loop warning.
+- `tests/fixtures-schema.test.mjs` records that `tests/fixtures/consumer/`
+  holds frozen historical inputs (CONTRACT-S9 §12.3, DECISIONS D18): their
+  boards keep the pre-D18 Basecamp entry as `sync[1]`, and stay as written.
+
 ## [2.1.1] - 2026-10-01
 
 ### Fixed
@@ -43,14 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The sync footer follows the one Obsidian target after Basecamp sync cleanup.
 - The cursor stays on its task through reads and optimistic writes.
 - Stream controls need the S9 CLI's `streams` catalogue; an older CLI keeps
-  today's list. The real-binary contract test runs only with an absolute
-  `TODOCLI_BIN`, explicitly requested by the engineer.
+  today's list.
+- The real-binary contract case in `tests/contract.test.mjs` runs only when
+  `TODOCLI_BIN` names an absolute path, and no longer looks for `todocli` on
+  `PATH`; `TODOCLI_REQUIRE_BIN=1` makes a missing `TODOCLI_BIN` a failure.
 
 ### Fixed
 
-- Focus-line ghosts and the tab strip ignore clicks while a picker is open;
-  detail priority marks use the row's colours, and the detail footer keeps a
-  fixed height.
+- Focus-line ghosts and the tab strip ignore clicks while a picker is open,
+  and the strip then shows no hover fill on its tabs and no tooltip on them or
+  on its overflow indicators; detail priority marks use the row's colours, and
+  the detail footer keeps a fixed height.
 
 ## [2.0.0]
 
