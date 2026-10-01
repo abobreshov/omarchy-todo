@@ -37,8 +37,11 @@ Item {
   }
   // UX §24.3: no tab switch can hide an open picker. Only the click side
   // (a tab or the overflow indicator) is guarded; the IPC `tab` twin is not.
+  // The same state turns off the strip's hover look (fill and tooltips), so
+  // nothing looks clickable that is not; colour and popups only, no geometry.
+  readonly property bool picking: !!panel.ui.picker
   function choose(t) {
-    if (strip.panel.ui.picker) return
+    if (strip.picking) return
     if (panel.ui.moving) panel.pickTarget(t.uid)
     else panel.selectTab(t.uid)
   }
@@ -55,6 +58,7 @@ Item {
     readonly property color labelColor: current && !inert ? Color.accent : strip.panel.dimForeground
     readonly property bool current: strip.panel.currentTab === tab.uid
     readonly property real ruleWidth: boundary ? 1 + 2 * Style.spacing.sm : 0
+    readonly property bool hoverShown: hover.hovered && !strip.picking
     height: strip.height
     Accessible.name: tab.label
     Accessible.role: Accessible.PageTab
@@ -64,9 +68,10 @@ Item {
       color: strip.panel.dimForeground; opacity: box.boundary ? 0.4 : 0
     }
     Rectangle {
+      objectName: "tabFill_" + box.tab.uid
       x: box.ruleWidth; width: parent.width - x; height: parent.height
       radius: Style.cornerRadius
-      color: hover.hovered && !box.inert ? Style.hoverFillFor(strip.panel.contentForeground, Color.accent) : "transparent"
+      color: box.hoverShown && !box.inert ? Style.hoverFillFor(strip.panel.contentForeground, Color.accent) : "transparent"
       border.width: 1
       border.color: strip.panel.ui.moving && strip.panel.ui.moving.targetUid === box.tab.uid ? Color.accent : "transparent"
     }
@@ -85,7 +90,8 @@ Item {
     HoverHandler { id: hover }
     MouseArea { objectName: "tabClick_" + box.tab.uid; anchors.fill: parent; enabled: !box.inert; onClicked: strip.choose(box.tab) }
     PanelToolTip {
-      visible: hover.hovered
+      objectName: "tabTip_" + box.tab.uid
+      visible: box.hoverShown
       text: Tabs.tooltipOf(box.tab, strip.panel.items, strip.panel.viewDayStart, strip.panel.catalogue)
       fontFamily: strip.panel.contentFontFamily
     }
@@ -112,7 +118,11 @@ Item {
         else if (!strip.panel.ui.moving) strip.choose(t)
       }
     }
-    PanelToolTip { visible: indicatorHover.hovered && indicator.hidden > 0; text: strip.hiddenTip(indicator.toLeft); fontFamily: strip.panel.contentFontFamily }
+    PanelToolTip {
+      objectName: indicator.objectName + "Tip"
+      visible: indicatorHover.hovered && indicator.hidden > 0 && !strip.picking
+      text: strip.hiddenTip(indicator.toLeft); fontFamily: strip.panel.contentFontFamily
+    }
   }
   Row {
     height: parent.height

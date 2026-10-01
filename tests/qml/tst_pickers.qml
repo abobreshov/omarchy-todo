@@ -147,6 +147,41 @@ Item {
       mouseClick(ind,ind.width/2,ind.height/2)
       compare(panel.currentTab,nearest)
     }
+    // UX §24.3 (hover is ignored while picking) and 4.1: under a picker a tab
+    // shows no hover fill and no tooltip, nor does the overflow indicator,
+    // as their clicks do nothing; colour and popups only, the geometry holds.
+    function test_strip_hover_look_is_off_under_picker() {
+      addStreams(8)
+      tryVerify(function(){return findChild(panel,"tab_s0")!==null})
+      var box=findChild(panel,"tab_s0"), fill=findChild(box,"tabFill_s0"), tip=findChild(box,"tabTip_s0")
+      var ind=findChild(panel,"indicatorRight"), indTip=findChild(ind,"indicatorRightTip")
+      verify(fill!==null); verify(tip!==null); verify(indTip!==null)
+      function geometry() {
+        var at=box.mapToItem(null,0,0), indAt=ind.mapToItem(null,0,0)
+        return JSON.stringify([at.x,at.y,box.width,box.height,indAt.x,ind.width,ind.height,fill.width,fill.height])
+      }
+      var before=geometry()
+      try {
+        mouseMove(box,box.width/2,box.height/2)
+        tryVerify(function(){return tip.visible}); verify(fill.color.a>0)
+        panel.dispatch({type:"key",key:"!"})
+        compare(panel.ui.picker.id,"4")
+        compare(fill.color.a,0); tryVerify(function(){return !tip.visible})
+        mouseMove(ind,ind.width/2,ind.height/2); wait(600)
+        verify(!indTip.visible)
+        mouseMove(box,box.width/2,box.height/2); wait(600)
+        compare(fill.color.a,0); verify(!tip.visible)
+        compare(geometry(),before)
+        compare(panel.currentTab,"overview"); compare(panel.ui.picker.id,"4")
+        panel.dispatch({type:"esc"}); compare(panel.ui.picker,null)
+        verify(fill.color.a>0); tryVerify(function(){return tip.visible})
+        mouseMove(ind,ind.width/2,ind.height/2)
+        tryVerify(function(){return indTip.visible}); compare(fill.color.a,0)
+        compare(geometry(),before)
+      } finally {
+        mouseMove(top,415,300)   // park the pointer off the strip and the rows
+      }
+    }
     // UX §24.1: the row mark's tone wiring (Priority.markTone on the value
     // and on isDone: a done row's mark is dim whatever its level).
     function test_row_mark_tones() {
