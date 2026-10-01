@@ -15,7 +15,11 @@ Column {
   readonly property color fg: panel.contentForeground
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
-  readonly property real desiredHeight: pinned.implicitHeight + rowsScroll.contentHeight + (help.visible ? help.implicitHeight : 0) + 2 * spacing
+  // What the column lays out around the rows: the pinned block and its gap,
+  // and the help line with its own gap only while shown (a hidden child
+  // takes no gap). The card asks for it and the rows viewport is the rest.
+  readonly property real chromeHeight: pinned.implicitHeight + spacing + (help.visible ? help.implicitHeight + spacing : 0)
+  readonly property real desiredHeight: chromeHeight + rowsScroll.contentHeight
   readonly property alias rowsFlickable: rowsScroll
   spacing: Style.spacing.md
   function ensureCursor(reset) {
@@ -73,9 +77,9 @@ Column {
     objectName: "todoRows"
     visible: list.listShown
     width: parent.width
-    // help.height, as desiredHeight counts it: a hidden help line keeps its
-    // implicitHeight, and subtracting that clipped the last row (2.1.1).
-    height: Math.min(contentHeight, Math.max(0, list.maxHeight - pinned.implicitHeight - help.height - 2 * list.spacing))
+    // chromeHeight, as desiredHeight counts it: subtracting a hidden help
+    // line's implicitHeight clipped the last row (2.1.1).
+    height: Math.min(contentHeight, Math.max(0, list.maxHeight - list.chromeHeight))
     contentWidth: width; contentHeight: content.implicitHeight
     clip: true; boundsBehavior: Flickable.StopAtBounds
     interactive: contentHeight > height && !list.panel.wheelLatched

@@ -93,6 +93,9 @@ Item {
       ids().forEach(function(id) { out = out.concat(problems(id, img)) })
       compare(out, [])
       compare(f.height, f.contentHeight, "the rows fit: the viewport is their height")
+      // The card asks for what the list lays out: one gap above the rows, a
+      // second only above a shown help line (2.1.2).
+      compare(f.parent.desiredHeight, f.parent.implicitHeight, "no spare gap under the rows")
     }
 
     function test_inbox_only_done_tail_is_drawn() {
