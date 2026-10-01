@@ -4,6 +4,7 @@
 .import "Tabs.js" as Tabs
 .import "Cursor.js" as Cursor
 .import "Streams.js" as Streams
+.import "Pickers.js" as Pickers
 
 // Key resolution and the panel's view-state reducer (UX §4.5, §7; PLAN
 // §6.8, A20). Pure: `keyAction` turns a key into a store action (or a
@@ -27,7 +28,7 @@ function isDeleteKey(key) { return DELETE_KEYS[key] === true }
 function initialUi() {
   return {
     view: "list",          // list | compose | detail | error
-    cursorKey: "", horizonFilter: "all", moving: null,
+    cursorKey: "", horizonFilter: "all", moving: null, picker: null,
     cursor: 0,             // index into ctx.rows (the focus line is row 0 when shown)
     stepCursor: 0,         // detail view: index into the plan steps
     selectedId: "",        // detail view: the task shown
@@ -64,6 +65,7 @@ function isDoneRow(item) {
 function keyAction(view, key, ctx) {
   var c = ctx || {}
   if (view === "compose") return null
+  if (c.picker) return null
   if (key === "r") return { type: "refresh" }
   if (key === "R") return { type: "syncNow" }
   if (view === "error") return null
@@ -224,6 +226,14 @@ function reduceUi(ui, event, ctx) {
   var ev = event || {}
   var now = ev.now || 0
   if (ev.type === "rows") next = Cursor.reanchor(next, c.rows || [], c.idMap)
+  var pc = copyUi(c)
+  pc.item = keyContext(next, c).item
+  // Legacy reducer callers omit capabilities; production always supplies them.
+  var picked = next.picker || c.hasStreams !== undefined || c.backend === "json" ? Pickers.reduce(next, ev, pc) : null
+  if (picked) {
+    next = picked.ui; actions = picked.actions
+    if (!picked.continueEvent) return { ui: next, actions: actions }
+  }
   if (next.view !== "compose" && !(ev.type === "esc" && next.armedId !== "")) {
     var tc = copyUi(c)
     tc.item = keyContext(next, c).item
@@ -343,4 +353,14 @@ function reduceUi(ui, event, ctx) {
   }
   if (["rows", "text", "tick"].indexOf(ev.type) === -1) next.cursorKey = Cursor.anchorOf(next, c.rows || [])
   return { ui: next, actions: actions }
+}
+
+// QML forwards the store/view context without duplicating this literal.
+function panelContext(p) {
+  return {
+    currentTab: p.currentTab, tabKey: p.tabKey, catalogue: p.catalogue, previousCatalogue: p.previousCatalogue,
+    hasStreams: p.store.hasStreams, items: p.items, busy: p.errored, idMap: p.storeIdMap,
+    rows: p.rows, steps: p.detailItem ? p.detailItem.plan.length : 0, backend: p.backend, focus: p.focusModel,
+    sessionDone: p.liveSessionDone, pomodoro: p.pomodoro, prefill: p.focusModel && p.focusModel.text ? p.focusModel.text : ""
+  }
 }

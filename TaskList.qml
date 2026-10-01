@@ -109,7 +109,7 @@ Column {
     id: help
     visible: list.listShown && list.panel.ui.help
     height: visible ? implicitHeight : 0
-    text: View.helpLine("list", list.panel.backend, list.panel.metadata, list.panel.stripShown, list.panel.tabKey)
+    text: View.helpLine("list", list.panel.backend, list.panel.metadata, list.panel.stripShown, list.panel.tabKey, list.panel.ui.picker)
     font.pixelSize: Style.font.caption
   }
   ErrorView { visible: list.panel.ui.view === "error"; width: parent.width; panel: list.panel }

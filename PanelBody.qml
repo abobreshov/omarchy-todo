@@ -45,7 +45,7 @@ KeyboardPanel {
     }
     StatusFooter {
       id: pinnedFooter
-      visible: root.host.ui.view === "list" && (root.host.footerModel !== null || root.host.message !== "" || root.host.ui.moving !== null)
+      visible: root.host.ui.view === "list" && (root.host.footerModel !== null || root.host.message !== "" || root.host.ui.moving !== null || root.host.ui.picker !== null)
       width: parent.width
       height: visible ? implicitHeight : 0
       anchors.bottom: parent.bottom
@@ -88,7 +88,7 @@ KeyboardPanel {
         }
 
         StatusFooter {
-          visible: root.host.ui.view !== "compose" && ((root.host.footerModel !== null && root.host.ui.view !== "error") || root.host.message !== "")
+          visible: root.host.ui.view !== "compose" && ((root.host.footerModel !== null && root.host.ui.view !== "error") || root.host.message !== "" || root.host.ui.picker !== null)
           width: parent.width
           panel: root.host
         }

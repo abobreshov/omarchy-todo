@@ -10,6 +10,9 @@
 //     `--task` or `--clear` reply; `label`/`unlabel` share write-label.json;
 //     S9 adds move, horizon, priority, size); `sync` replays
 //     contract/sync-all.json
+//   - `priority`/`size` with FAKE_MUTATE_METADATA=1 and a path $FAKE_BOARD
+//     write the value into that board and print the task (the smoke test's
+//     scratch copy only); otherwise they replay the contract reply
 //   - `FAKE_EXIT=<n>` exits with that code after printing the real §3.5
 //     envelope, contract/envelope-<$FAKE_KIND>.json (the kind by exit code
 //     when unset: 75 busy, 127 missing… else error), unless FAKE_STDOUT
@@ -49,6 +52,15 @@ if (process.env.FAKE_EXIT && process.env.FAKE_EXIT !== "0") {
 const boardFile = process.env.FAKE_BOARD;
 if (cmd === "board" || cmd === "list" || cmd === "render") {
   process.stdout.write(!boardFile ? contract("board.json") : boardFile.includes("/") ? fs.readFileSync(boardFile, "utf8") : contract(boardFile));
+} else if ((cmd === "priority" || cmd === "size") && process.env.FAKE_MUTATE_METADATA === "1" && boardFile && boardFile.includes("/")) {
+  // Smoke alone opts into persistence, against its explicit scratch copy;
+  // every other caller gets the canonical write-<verb>.json reply below.
+  const board = JSON.parse(fs.readFileSync(boardFile, "utf8"));
+  const task = board.tasks.find(t => String(t.id) === rest[0]);
+  if (!task) { process.stderr.write("unknown id\n"); process.exit(1); }
+  task[cmd] = rest[1] === "none" ? null : cmd === "priority" ? Number(rest[1]) : rest[1];
+  fs.writeFileSync(boardFile, JSON.stringify(board));
+  process.stdout.write(JSON.stringify(task) + "\n");
 } else if (cmd === "sync") {
   process.stdout.write(contract("sync-all.json"));
 } else if (cmd === "focus") {

@@ -111,6 +111,7 @@ test("compose headers name the target and inherited non-short horizon",()=>{
 
 test("view selection shares grouping with dump and preserves Inbox-only E1/E2", () => {
   const migrated = lib('Store.js').fromCli(JSON.parse(fs.readFileSync(path.join(here, 'fixtures/provisional/board-migrated.json'), 'utf8')));
+  assert.equal(S.viewKey('done', migrated.streams), 'overview');
   for (const tab of ['overview', 'inbox']) {
     assert.equal(S.viewKey(tab, migrated.streams), 'overview');
     const empty = S.viewRows([], migrated.streams, tab);

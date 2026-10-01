@@ -71,6 +71,7 @@ Click the checkbox icon in the bar (or `omarchy-shell abobreshov.todo toggle`).
 | `s` | Toggle doing (on the focus task, doing → todo also clears the focus) | Same |
 | `f` | Set as focus (marks it doing); on the focus task: clear | Same |
 | `p` | Focus it and start its pomodoro; on the attached task: pause/resume | Same |
+| `!` / `z` | Priority / size picker (current cli; size needs a short task) | Same |
 | `x` `x`, Delete, Backspace | Delete (the first press arms the row for 3 s, the second, any of the three, deletes) | Delete and go back |
 | `r` | Reload (json: re-read the file; cli: `todocli board --json`) | Same |
 | `R` | Sync now (cli only) | Same |
@@ -90,6 +91,13 @@ a sync.
 The pill shows, in this order: a backend error, the doing task (the focus task
 if it is doing, else the lowest id), the focus text, the open count, nothing.
 Vertical bars show the icon only.
+
+The priority and size pickers use the footer: `[` / `]` step, Enter or Space
+sets, a digit picks at once (`0` = None), and Esc or the same picker key
+cancels. Clicking the current level preserves a tuned number such as 80.
+Other keys, hover and sideways scrolling leave the picked task in place;
+vertical scrolling still works. In compose, `!` and `z` are ordinary text.
+The detail fields show the stored number, including `priority: low (0)`.
 
 ## Settings
 
@@ -163,6 +171,8 @@ omarchy-shell abobreshov.todo open|close|show|hide|toggle
 
 # Fork additions
 omarchy-shell abobreshov.todo setStatus <id> todo|doing|done  # -> ok | unknown id | bad status
+omarchy-shell abobreshov.todo setPriority <id> high|0|37|none  # -> ok | unknown id | bad priority
+omarchy-shell abobreshov.todo setSize <id> XS|S|M|L|XL|none    # -> ok | unknown id | bad size | size is for short-term tasks only
 omarchy-shell abobreshov.todo focus <id>|clear                # -> ok | unknown id | refused: done
 omarchy-shell abobreshov.todo startPomodoro <id>|focus        # -> ok | unknown id | no focus | refused: done
 omarchy-shell abobreshov.todo toggleStep <id> <n>             # -> ok | unknown id | bad step

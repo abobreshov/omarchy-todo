@@ -182,7 +182,8 @@ check "E14 the new file holds the item" "$(python3 -c 'import json,sys; print([t
 stop
 
 # ---- P2 views: fixture clocks never constrain the moving Done window --------
-export FAKE_BOARD="$here/tests/fixtures/provisional/board-streams.json"
+cp "$here/tests/fixtures/provisional/board-streams.json" "$scratch/board-streams.json"
+export FAKE_BOARD="$scratch/board-streams.json" FAKE_MUTATE_METADATA=1
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8
 check "P2 Overview tab" "$(dump | field 'd["tab"]')" "overview"
@@ -194,12 +195,19 @@ check "P2 default horizon" "$(dump | field 'd["horizonFilter"]')" "all"
 check "P2 no move mode" "$(dump | field 'd["moving"]')" "None"
 check "P2 eight item keys" "$(dump | field 'all(set(r) == {"kind","id","status","stream","horizon","badge","priority","size"} for r in d["rows"] if r["kind"] == "item")')" "True"
 check "P2 zero priority" "$(dump | field 'next(r["priority"] for r in d["rows"] if r.get("id") == "2")')" "0"
+check "P3 bad priority" "$(call setPriority 4 150)" "bad priority"
+check "P3 zero priority accepted" "$(call setPriority 4 0)" "ok"
+sleep 0.5
+check "P3 dump preserves zero" "$(dump | field 'next(r["priority"] for r in d["rows"] if r.get("id") == "4")')" "0"
+check "P3 numeric zero argv" "$(grep -m1 '"priority"' "$FAKE_LOG" | field 'd["argv"]')" "['--source', 'omarchy', '--json', 'priority', '4', '0']"
+check "P3 short-only size" "$(call setSize 5 M)" "size is for short-term tasks only"
 check "P2 tab done" "$(call tab done)" "ok"
 check "P2 Done selected" "$(dump | field 'd["tab"]')" "done"
 check "P2 day shape on any clock" "$(dump | field 'isinstance(d["rows"], list) and all(set(r) == {"kind","date","count"} for r in d["rows"] if r["kind"] == "day")')" "True"
 check "P2 tab 0" "$(call tab 0)" "ok"
 check "P2 unknown tab" "$(call tab nowhere)" "unknown stream"
 stop
+unset FAKE_MUTATE_METADATA
 export FAKE_BOARD="$here/tests/fixtures/provisional/board-migrated.json"
 start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8

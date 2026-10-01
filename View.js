@@ -2,6 +2,7 @@
 .import "Model.js" as Model
 .import "Streams.js" as Streams
 .import "Tabs.js" as Tabs
+.import "Pickers.js" as Pickers
 
 // The view decisions and the copy (UX §3.1, §4.2, §4.4, §4.5, §4.7, §10.3):
 // the list's order and the session's done rows, the focus line, the detail
@@ -125,11 +126,13 @@ function emptyCopy(items) {
   return null
 }
 
-function helpLine(view, backend, hasStreams, stripShown, tab) {
-  if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro · x x or Del delete · Esc back"
+function helpLine(view, backend, hasStreams, stripShown, tab, picker) {
+  if (picker) return Pickers.help(picker.kind)
+  var controls = backend === "cli" && hasStreams ? " · " + Pickers.entryHelp() : ""
+  if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro" + controls + " · x x or Del delete · Esc back"
   if (tab === "done") return "d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs · r reload · R sync · Tab next panel"
   var extra = backend === "cli" && hasStreams ? (stripShown ? " · m move · [ ] 0-9 tabs" : "") + " · v horizon" : ""
-  return "n new · d done · s doing · f focus · p pomodoro" + extra + " · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
+  return "n new · d done · s doing · f focus · p pomodoro" + controls + extra + " · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
 }
 
 // ---------------------------------------------------------------- row cluster
@@ -308,4 +311,14 @@ function dumpView(state) {
 function focusCaption(line, catalogue, tab, metadata) {
   if (!metadata || !line || !line.item || Tabs.active(catalogue).length < 2 || line.item.stream === tab) return ""
   return Streams.streamCaptionOf(line.item, catalogue)
+}
+
+// Snapshot of the composition root for the unchanged dump codec.
+function panelState(p) {
+  return {
+      backend: p.backend, cliPath: p.cliPath, view: p.ui.view, stale: p.store.stale, error: p.store.error, pill: p.pill,
+      items: p.items, focus: p.focusModel, sessionDone: p.liveSessionDone, banner: p.banner === "" ? null : p.banner,
+      hasStreams: p.store.hasStreams, catalogue: p.catalogue, tab: p.tabKey, strip: p.stripShown ? p.strip : null, horizonFilter: p.ui.horizonFilter, moving: p.ui.moving, displayRows: p.displayRows, latches: p.latches, reopened: p.sessionReopened, dayStart: p.viewDayStart,
+      footer: p.ui.view === "error" ? null : p.footerModel, message: p.message === "" ? null : p.message
+  }
 }

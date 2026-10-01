@@ -4,6 +4,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "View.js" as View
+import "Priority.js" as Priority
 
 // Read-only detail view (UX §4.4): back + title, the status line, the
 // description, the plan (steps tick with Enter/Space/click), the notes and
@@ -85,7 +86,21 @@ Column {
     }
   }
 
-  Caption { width: parent.width; text: view.statusText }
+  Caption { objectName: "detailStatus"; width: parent.width; text: view.statusText }
+
+  Caption {
+    objectName: "detailFields"
+    width: parent.width
+    text: Priority.fieldsLine(view.item, view.panel.metadata)
+    visible: text !== ""
+  }
+
+  Caption {
+    objectName: "detailLabels"
+    width: parent.width
+    text: view.hasItem && view.panel.metadata ? view.item.labels.map(function(label) { return "#" + label }).join(" ") : ""
+    visible: text !== ""
+  }
 
   Body {
     text: view.hasItem && view.item.description !== "" ? view.item.description : "No description."
@@ -243,7 +258,7 @@ Column {
   Caption {
     visible: view.panel.ui.help
     width: parent.width
-    text: View.helpLine("detail", view.panel.backend)
+    text: View.helpLine("detail", view.panel.backend, view.panel.store.hasStreams, false, view.panel.currentTab, view.panel.ui.picker)
     wrapMode: Text.WordWrap
     elide: Text.ElideNone
   }

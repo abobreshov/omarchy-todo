@@ -284,7 +284,7 @@ test("dumpView produces the UX §10.3 shape", () => {
 
 test("P2 help lines, metadata rows, empty scopes, move targets and degraded modes", () => {
   const doc=boardFixture("provisional/board-streams.json");
-  assert.equal(View.helpLine("list","cli",true,true,"overview"),"n new · d done · s doing · f focus · p pomodoro · m move · [ ] 0-9 tabs · v horizon · x x or Del delete · r reload · R sync · Tab next panel");
+  assert.equal(View.helpLine("list","cli",true,true,"overview"),"n new · d done · s doing · f focus · p pomodoro · ! priority · z size · m move · [ ] 0-9 tabs · v horizon · x x or Del delete · r reload · R sync · Tab next panel");
   assert.equal(View.helpLine("list","cli",true,false,"overview").includes("m move"),false);
   assert.equal(View.helpLine("list","cli",true,false,"overview").includes("v horizon"),true);
   assert.equal(View.helpLine("list","cli",true,true,"done"),"d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs · r reload · R sync · Tab next panel");

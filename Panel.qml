@@ -13,6 +13,7 @@ import "Keys.js" as KeyMap
 import "Streams.js" as Streams
 import "Tabs.js" as Tabs
 import "Order.js" as Order
+import "Priority.js" as Priority
 
 // Composition root: bind pure views/reducers, forward IPC and store actions.
 Panel {
@@ -52,6 +53,7 @@ Panel {
   // Session-done visibility follows current status; rollbacks prune it.
   property string currentTab: "overview"
   property var clock: function() { return Date.now() }
+  // Sample the local day at open; reads and ticks never roll the view over.
   property double viewDayStart: 0
   property int tickSequence: 0
   property var latches: ({})
@@ -62,6 +64,7 @@ Panel {
   property int stripFirst: 1
   readonly property bool wheelLatched: Tabs.wheelLatched(wheelState, clockNow)
   signal cursorScroll(bool reset)
+  // id → pre-tick status; current status prunes rolled-back ticks.
   property var sessionDone: ({})
   readonly property var liveSessionDone: View.pruneSessionDone(sessionDone, items)
   property string message: ""
@@ -106,6 +109,7 @@ Panel {
   onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
   // Defer change handlers until construction ends to avoid ui binding loops.
+  // Initial readonly evaluations emit change signals during construction.
   property bool ready: false
 
   onStoreErrorChanged: if (ready) dispatch({ type: "storeError", error: storeError })
@@ -140,6 +144,7 @@ Panel {
   function applyBackend() {
     sessionDone = ({}); latches = ({}); sessionReopened = ({}); tickSequence = 0
     message = ""
+    dispatch({ type: "resetCursor" })
     store.load()
   }
 
@@ -175,13 +180,7 @@ Panel {
   }
 
   // ---- the reducer
-  function reducerCtx() {
-    return {
-      currentTab: currentTab, tabKey: tabKey, catalogue: catalogue, previousCatalogue: previousCatalogue, hasStreams: store.hasStreams, items: items, busy: errored, idMap: storeIdMap,
-      rows: rows, steps: detailItem ? detailItem.plan.length : 0, backend: backend, focus: focusModel,
-      sessionDone: liveSessionDone, pomodoro: pomodoro, prefill: focusModel && focusModel.text ? focusModel.text : ""
-    }
-  }
+  function reducerCtx() { return KeyMap.panelContext(root) }
 
   function dispatch(event) {
     event.now = clock()
@@ -200,7 +199,7 @@ Panel {
 
   function apply(action) {
     switch (action.type) {
-      case "add": case "setStatus": case "focus": case "toggleStep": case "remove": case "move":
+      case "add": case "setStatus": case "focus": case "toggleStep": case "remove": case "move": case "setPriority": case "setSize":
         noteReply(perform(action)); break
       case "selectTab": selectTab(action.uid); break
       case "startPomodoro": noteReply(startPomodoro(action.id)); break
@@ -226,6 +225,7 @@ Panel {
 
   // Mouse twins share key actions; delete still arms before removing.
   function rowKey(id, key) {
+    if (ui.picker) return
     var it = Model.findItem(items, id)
     var action = KeyMap.keyAction("list", key, { item: it, currentTab: currentTab, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
     if (!action) return
@@ -242,6 +242,7 @@ Panel {
     if (errored) return Errors.unavailable(store.error)
     var tick = currentTab === "done" ? null : View.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
     var ctx = { items: items, catalogue: catalogue, metadata: metadata, currentTab: currentTab }
+    // Record tick-time values and peers before the optimistic store write.
     var held = Order.recordTick({ latches: latches, tickSequence: tickSequence }, action, ctx)
     latches = held.latches; tickSequence = held.tickSequence
     sessionReopened = Order.recordReopen({ reopened: sessionReopened }, action, ctx)
@@ -252,6 +253,7 @@ Panel {
       if (tick.message !== "") showMessage(tick.message)
     }
     if (action.type === "move" && reply === "ok") showMessage("#" + action.id + " moved to " + (action.stream === "inbox" ? "Inbox" : action.stream))
+    if (reply === "ok" && Priority.resultMessage(action) !== "") showMessage(Priority.resultMessage(action))
     return reply
   }
   function selectTab(uid) {
@@ -262,7 +264,7 @@ Panel {
   }
   function pickTarget(uid) { dispatch({ type: "chooseTab", uid: uid }) }
   function wheelTab(ev) {
-    if (!stripShown || ui.view !== "list") return
+    if (!stripShown || ui.view !== "list" || ui.picker) return
     var result = Tabs.wheel(wheelState, ev)
     clockNow = ev.at
     wheelState = result.state
@@ -318,14 +320,7 @@ Panel {
     return "ok"
   }
 
-  function dump() {
-    return JSON.stringify(View.dumpView({
-      backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
-      items: items, focus: focusModel, sessionDone: liveSessionDone, banner: banner === "" ? null : banner,
-      hasStreams: store.hasStreams, catalogue: catalogue, tab: tabKey, strip: stripShown ? strip : null, horizonFilter: ui.horizonFilter, moving: ui.moving, displayRows: displayRows, latches: latches, reopened: sessionReopened, dayStart: viewDayStart,
-      footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
-    }))
-  }
+  function dump() { return JSON.stringify(View.dumpView(View.panelState(root))) }
 
   // ---- stores and links: the inactive store spawns and watches nothing.
   JsonStore {

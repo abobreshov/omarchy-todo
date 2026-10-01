@@ -56,6 +56,12 @@ BarWidget {
   // One Store.js action per mutating IPC function, with upstream's replies.
   function perform(action) { return panel ? Store.ipcReply(action, panel.perform(action)) : "unavailable" }
 
+  function metadata(kind, id, value) {
+    if (!panel) return "unavailable"
+    var r = Store.metadataIntent({ backend: panel.backend, hasStreams: panel.store.hasStreams, error: panel.store.error, items: panel.items, focus: panel.focusModel }, kind, id, value)
+    return r.action ? root.perform(r.action) : r.reply
+  }
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -107,6 +113,8 @@ BarWidget {
     // Fork additions (UX §10.3). Replies mean accepted, not committed, in
     // cli mode; `unavailable: <reason>` from a known error state.
     function setStatus(id: string, status: string): string { return root.perform({ type: "setStatus", id: id, status: status }) }
+    function setPriority(id: string, value: string): string { return root.metadata("priority", id, value) }
+    function setSize(id: string, value: string): string { return root.metadata("size", id, value) }
     function focus(id: string): string { return root.perform({ type: "focus", id: id }) }
     function toggleStep(id: string, n: string): string { return root.perform({ type: "toggleStep", id: id, n: n }) }
 

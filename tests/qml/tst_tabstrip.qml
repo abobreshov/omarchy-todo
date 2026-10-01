@@ -11,7 +11,7 @@ Item {
   readonly property var strip: stripLoader.item
   Loader {
     id: stripLoader
-    width: Style.space(340) - 2 * Style.spacing.popupPadding
+    width: Style.space(340) - 2 * (Style.spacing.popupPadding + Math.max(1, Style.space(2)))
     active: fakePanel.ui.view === "list"
     sourceComponent: Todo.TabStrip { width: stripLoader.width; panel: fakePanel }
   }
@@ -51,11 +51,11 @@ Item {
       }
     }
     function test_AC_ST_60_font_width_window_and_done_geometry() {
-      compare(strip.width,Style.space(340)-2*Style.spacing.popupPadding)
+      compare(strip.width,Style.space(340)-2*(Style.spacing.popupPadding + Math.max(1, Style.space(2))))
       compare(strip.widths[2],strip.fontMetrics.advanceWidth("leadtone")+2*strip.tabPadding)
       console.log("PROBE stripWidth=" + strip.width + " widths=" + JSON.stringify(strip.widths))
       compare(JSON.stringify(strip.widths),JSON.stringify([32,67,64,58,49,46,32]))
-      compare(strip.windowBudget(),200)
+      compare(strip.windowBudget(),196)
       layout([1,3,0,3])
       console.log("PROBE overview="+JSON.stringify(strip.layout))
       verify(box("done")===null)

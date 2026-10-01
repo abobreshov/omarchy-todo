@@ -1,6 +1,7 @@
 .pragma library
 .import "Model.js" as Model
 .import "Priority.js" as Priority
+.import "Errors.js" as Errors
 
 // The two document shapes and the one mutation API (PLAN §6.3, §6.4, A17,
 // A34). Pure and total, as Model.js; both stores apply every change through
@@ -293,4 +294,15 @@ function reduce(doc, action, now) {
 // whatever the id.
 function ipcReply(action, reply) {
   return action.type === "remove" && reply === "unknown id" ? "ok" : reply
+}
+
+// The IPC twins parse strings before the normalized reducer domain.
+function metadataIntent(ctx, kind, id, input) {
+  var error = Priority.unavailable(ctx)
+  if (error === "" && ctx.error) error = Errors.unavailable(ctx.error)
+  if (error !== "") return { reply: error, action: null }
+  var parsed = kind === "priority" ? Priority.parse(input) : Priority.parseSize(input)
+  if (parsed.error) return { reply: parsed.error, action: null }
+  var r = reduce(ctx, { type: kind === "priority" ? "setPriority" : "setSize", id: String(id), value: parsed.value })
+  return { reply: r.reply, action: r.action }
 }
