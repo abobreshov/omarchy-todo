@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { lib, item, here } from "./helpers.mjs";
+import { lib, item, here, NOW } from "./helpers.mjs";
 
 const Store = lib("Store.js");
 const Queue = lib("Queue.js");
@@ -24,7 +24,7 @@ test("UI-30: failed setPriority followed by queued setStatus keeps zero and ever
   const base = Store.fromCli(fixture("provisional/board-streams.json"));
   const before = { items: base.items, focus: base.focus };
   const w1 = Store.reduce(before, { type: "setPriority", id: "2", value: 75 });
-  const w2 = Store.reduce(w1.doc, { type: "setStatus", id: "2", status: "doing" });
+  const w2 = Store.reduce(w1.doc, { type: "setStatus", id: "2", status: "doing", at: NOW });
   const failure = JSON.parse(fixture("consumer/write-failed-refused.json"));
   assert.equal(Errors.classifyExit(failure.code, failure.error, false).kind, "failed");
   const r = Queue.rebase(before, [{ action: w2.action, before: w1.doc, tempId: null }]);
@@ -93,7 +93,7 @@ test("rebase after a failed write keeps the later queued optimistic writes and r
   // doc as their `before`.
   const w1 = Store.reduce(base, { type: "add", name: "Fails" });
   const w2 = Store.reduce(w1.doc, { type: "add", name: "Queued add" });
-  const w3 = Store.reduce(w2.doc, { type: "setStatus", id: "1", status: "doing" });
+  const w3 = Store.reduce(w2.doc, { type: "setStatus", id: "1", status: "doing", at: NOW });
   const queue = [
     { action: w2.action, tempId: w2.item.id, before: w1.doc, done: null },
     { action: w3.action, tempId: null, before: w2.doc, done: null },
@@ -109,7 +109,7 @@ test("rebase after a failed write keeps the later queued optimistic writes and r
   const again = Queue.rebase(r.entries[0].before, [r.entries[1]]);
   assert.deepEqual(again.doc.items.map((t) => [t.id, t.status]), [["1", "doing"]], "W1 and W2 gone, W3 kept");
   // An action the rebased doc refuses (a step on the failed add) is skipped.
-  const dependent = [{ action: { type: "setStatus", id: w1.item.id, status: "done" }, tempId: null, before: w1.doc, done: null }];
+  const dependent = [{ action: { type: "setStatus", id: w1.item.id, status: "done", at: NOW }, tempId: null, before: w1.doc, done: null }];
   assert.deepEqual(Queue.rebase(base, dependent).doc, { items: base.items, focus: base.focus });
   assert.deepEqual(Queue.rebase(base, null).doc, { items: base.items, focus: base.focus }, "nothing queued: the doc from before");
   assert.deepEqual(Queue.rebase(base, [null]).entries, [{ before: { items: base.items, focus: base.focus } }], "a hole in the queue is carried, not applied");

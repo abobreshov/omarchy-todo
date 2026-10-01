@@ -164,6 +164,14 @@ function isOrphan(streams, item) {
   return item.status !== "done" && (home === null || home.archivedAt !== null)
 }
 
+// An open orphan belongs to the Inbox without changing its stored stream key.
+function homeStreamOf(catalogue, item) {
+  return homeOf(catalogue, isOrphan(catalogue, item) ? "inbox" : item.stream)
+}
+function activeStreams(catalogue) {
+  return (catalogue || []).filter(function(s) { return s.archivedAt === null })
+}
+
 function normalize(item) {
   if (!item || typeof item !== "object") return null
   var name = squish(item.name)

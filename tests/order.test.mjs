@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lib } from './helpers.mjs';
-import { task } from './p2-helpers.mjs';
+import { task, streams } from './p2-helpers.mjs';
 process.env.TZ = 'Europe/London';
 const O = lib('Order.js');
 const sorted = tasks => tasks.slice().sort(O.compareOpen).map(t => t.id);
@@ -66,4 +66,48 @@ test('done order and reopen placement use instants then id, never priority', () 
   assert.deepEqual([a,c,b].sort(O.compareDone).map(t=>t.id), ['2','3','1']);
   assert.deepEqual(O.placeReopened([{...b,status:'todo',completedAt:null},a,c],{2:b.completedAt}).map(t=>t.id), ['2','3','1']);
   assert.deepEqual(O.placeReopened([a,b]).map(t=>t.id), ['2','1']);
+});
+
+test('record tick chooses Overview peers, section peers and orphan Inbox uid', () => {
+  const items=[task(1,{priority:0}),task(2,{horizon:'mid'}),task(3,{horizon:'mid',status:'doing'}),task(4,{stream:'inbox'}),task(5,{stream:'missing'})];
+  const state={latches:{},tickSequence:7};
+  const ctx={items,catalogue:streams,metadata:true,currentTab:'overview'};
+  const action={type:'setStatus',id:'1',status:'done'};
+  let r=O.recordTick(state,action,ctx);
+  assert.deepEqual(r.latches[1].peers,{2:null,3:null});
+  assert.equal(r.latches[1].streamUid,'s1'); assert.equal(r.latches[1].priority,0);
+  assert.equal(r.latches[1].tickOrder,7); assert.equal(r.tickSequence,8);
+  r=O.recordTick(state,{...action,id:'5'},ctx);
+  assert.equal(r.latches[5].streamUid,'I'); assert.deepEqual(r.latches[5].peers,{4:null});
+  r=O.recordTick(state,{...action,id:'2'},{...ctx,currentTab:'s1'});
+  assert.deepEqual(r.latches[2].peers,{});
+  r=O.recordTick(state,action,{...ctx,currentTab:'s1'});
+  assert.deepEqual(r.latches[1].peers,{3:null});
+  for (const change of [{metadata:false},{currentTab:'done'},{items:[]},{items:[{...items[0],status:'done'}]}]) assert.deepEqual(O.recordTick(state,action,{...ctx,...change}),state);
+  for (const change of [{type:'focus'},{status:'todo'}]) assert.deepEqual(O.recordTick(state,{...action,...change},ctx),state);
+  assert.deepEqual(state,{latches:{},tickSequence:7});
+});
+
+test('record reopen preserves the first instant and ignores other actions/views', () => {
+  const it=task(1,{status:'done',completedAt:'2026-09-30T10:00:00Z'});
+  const ctx={currentTab:'done',items:[it]}, state={reopened:{}};
+  const action={type:'setStatus',id:'1',status:'todo'};
+  const first=O.recordReopen(state,action,ctx);
+  assert.deepEqual(first,{1:it.completedAt});
+  assert.deepEqual(O.recordReopen({reopened:first},action,{...ctx,items:[{...it,completedAt:'later'}]}),first);
+  for (const change of [{currentTab:'overview'},{items:[]},{items:[{...it,status:'todo'}]}]) assert.deepEqual(O.recordReopen(state,action,{...ctx,...change}),{});
+  for (const change of [{type:'focus'},{status:'doing'}]) assert.deepEqual(O.recordReopen(state,{...action,...change},ctx),{});
+  assert.deepEqual(state.reopened,{});
+});
+
+test('session identities and peer priorities translate and prune without dropping zero',()=>{
+  const held={id:'t1',status:'todo',priority:0,horizon:'short',streamUid:'s1',peers:{t2:0,3:null},tickOrder:0};
+  const state={latches:{t1:held,4:{...held,id:'4'}},reopened:{t2:'instant',gone:'instant'},sessionDone:{t1:'todo',4:'todo',gone:'doing'}};
+  const items=[task(22,{status:'done'}),task(23),task(4)];
+  const maps=O.sessionMaps(state,items,{t1:'22',t2:'23'});
+  assert.deepEqual(Object.keys(maps.latches),['22']);
+  assert.deepEqual(maps.latches[22].peers,{23:0,3:null}); assert.equal(maps.latches[22].id,'22');
+  assert.deepEqual(maps.reopened,{23:'instant'}); assert.deepEqual(maps.sessionDone,{22:'todo'});
+  assert.deepEqual(O.sessionMaps({},[]),{latches:{},reopened:{},sessionDone:{}});
+  assert.equal(state.latches.t1.peers.t2,0);
 });

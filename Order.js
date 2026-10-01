@@ -1,6 +1,7 @@
 .pragma library
 .import "Model.js" as Model
 .import "Priority.js" as Priority
+.import "Queue.js" as Queue
 
 var DONE_DAYS = 7
 var PRIORITY_FIRST = true
@@ -83,4 +84,65 @@ function placeReopened(items, reopened) {
     var bm = Object.prototype.hasOwnProperty.call(map, b.id) ? Date.parse(map[b.id]) : completedMs(b)
     return bm - am || compareId(a, b)
   })
+}
+
+// Grouping for tick snapshots uses the same home and block as displayed rows.
+function homeKeyOf(it, catalogue, latch) {
+  if (latch && latch.streamUid !== undefined) {
+    var held = catalogue.filter(function(s) { return s.uid === latch.streamUid })[0]
+    if (held) return held.key
+  }
+  var home = Model.homeStreamOf(catalogue, it)
+  return home ? home.key : it.stream
+}
+function blockOf(it, latch, overview) {
+  var h = latch ? latch.horizon : it.horizon, status = latch ? latch.status : it.status
+  return overview ? "all" : status === "doing" || h === "short" ? "short" : h
+}
+function latchBlock(items, item, catalogue, latches, overview) {
+  var home = homeKeyOf(item, catalogue, null), block = blockOf(item, null, overview)
+  return items.filter(function(it) {
+    var l = it.status === "done" && latches ? latches[it.id] : null
+    return homeKeyOf(it, catalogue, l) === home && blockOf(it, l, overview) === block
+  })
+}
+function recordTick(state, action, ctx) {
+  var out = { latches: Object.assign({}, state.latches), tickSequence: state.tickSequence }
+  var it = Model.findItem(ctx.items, action.id)
+  if (!ctx.metadata || ctx.currentTab === "done" || !it || it.status === "done" || action.type !== "setStatus" || action.status !== "done") return out
+  var home = Model.homeStreamOf(ctx.catalogue, it)
+  var overview = ctx.currentTab === "overview" && Model.activeStreams(ctx.catalogue).length > 1
+  var peers = latchBlock(ctx.items, it, ctx.catalogue, out.latches, overview)
+  out.latches[it.id] = latchOf(it, peers, home ? home.uid : undefined, out.tickSequence++)
+  return out
+}
+function recordReopen(state, action, ctx) {
+  var out = Object.assign({}, state.reopened)
+  var it = Model.findItem(ctx.items, action.id)
+  if (ctx.currentTab === "done" && it && it.status === "done" && action.type === "setStatus" && action.status === "todo" && !Object.prototype.hasOwnProperty.call(out, it.id)) out[it.id] = it.completedAt
+  return out
+}
+
+// Translate every task identity in the session, including peer snapshots.
+// Reopen latches survive status changes; tick latches survive only done.
+function sessionMaps(state, items, idMap) {
+  var out = { latches: {}, reopened: {}, sessionDone: {} }, map = idMap || {}
+  function real(id) { return Queue.realId(id, map) }
+  function find(id) { return items.filter(function(it) { return it.id === id })[0] || null }
+  var latches = state.latches || {}, reopened = state.reopened || {}, done = state.sessionDone || {}
+  for (var id in latches) {
+    var rid = real(id), it = find(rid)
+    if (!it || it.status !== "done") continue
+    var latch = {}, peers = {}
+    for (var k in latches[id]) latch[k] = latches[id][k]
+    for (var peer in latch.peers) peers[real(peer)] = latch.peers[peer]
+    latch.id = rid; latch.peers = peers
+    out.latches[rid] = latch
+  }
+  for (var r in reopened) if (find(real(r))) out.reopened[real(r)] = reopened[r]
+  for (var d in done) {
+    var task = find(real(d))
+    if (task && task.status === "done") out.sessionDone[real(d)] = done[d]
+  }
+  return out
 }

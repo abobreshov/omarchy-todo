@@ -7,7 +7,7 @@ import "../../Model.js" as Model
 Item {
   id: top
   width: 420; height: 520
-  property double now: Date.parse("2026-09-30T12:00:00+01:00")
+  property double now: Date.parse("2026-09-30T23:59:50+01:00")
   Todo.Panel {
     id: panel
     clock: function() { return top.now }
@@ -19,7 +19,7 @@ Item {
       compare(panel.viewDayStart,Order.dayStartOf(top.now))
       panel.open()
       var day=panel.viewDayStart
-      top.now=Date.parse("2026-10-01T12:00:00+01:00")
+      top.now=Date.parse("2026-10-01T00:00:10+01:00")
       panel.clockNow=top.now
       panel.refresh()
       panel.dispatch({type:"tick"})

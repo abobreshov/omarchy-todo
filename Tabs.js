@@ -7,14 +7,14 @@ var NOTCH = 120
 var RATIO = 2
 var QUIET_MS = 300
 var PX_PER_STEP = 48
-var DONE_WIDTH = 32
+var ICON_TAB_WIDTH = 32
 var INDICATOR_WIDTH = 24
 var FILTERS = ["all"].concat(Priority.HORIZONS)
 function cycleFilter(filter) { return FILTERS[(Math.max(0, FILTERS.indexOf(filter)) + 1) % FILTERS.length] }
 var E21 = "No streams yet · todocli stream add adds one"
 var E22 = "Streams need backend = cli."
 var E23 = "Streams need a newer todocli."
-function active(streams) { return (streams || []).filter(function(s) { return s.archivedAt === null }) }
+function active(streams) { return Model.activeStreams(streams) }
 function labelOf(stream, streams) {
   if (stream.system) return "Inbox"
   var shared = active(streams).filter(function(s) { return s.name.toLowerCase() === stream.name.toLowerCase() }).length > 1
@@ -33,10 +33,10 @@ function tabsOf(streams) {
   if (list.length > 1) out.push({ uid: "done", key: "done", label: "Done", digit: null, boundary: false })
   return out
 }
-function tooltipOf(tab, items, dayStart) {
+function tooltipOf(tab, items, dayStart, catalogue) {
   if (tab.key === "overview") return "Overview · every stream · key 0"
   if (tab.key === "done") return "Done\n" + items.filter(function(it) { return Order.inWindow(it, dayStart) }).length + " done in the last " + Order.DONE_DAYS + " days"
-  var scope = items.filter(function(it) { return it.stream === tab.key && it.status !== "done" })
+  var scope = items.filter(function(it) { return (tab.key === "inbox" ? Model.isOrphan(catalogue || [], it) || it.stream === "inbox" : it.stream === tab.key) && it.status !== "done" })
   return (tab.key === "inbox" ? "Inbox" : tab.key) + "\n" + scope.length + " open · " + scope.filter(function(it) { return it.status === "doing" }).length + " doing" + (tab.digit !== null ? "\nKey " + tab.digit : "")
 }
 function byDigit(tabs, digit) { return tabs.filter(function(t) { return t.digit !== null && t.digit === Number(digit) })[0] || null }
@@ -103,6 +103,18 @@ function unavailable(ctx, needsStrip) {
   if (needsStrip && active(ctx.catalogue).length < 2) return E21
   return ""
 }
+function ipcTab(tabs, name, ctx) {
+  var error = unavailable(ctx, false)
+  if (error !== "") return { reply: error, uid: null }
+  var single = active(ctx.catalogue).length < 2
+  if (single && Model.squish(name).toLowerCase() === "done") return { reply: E21, uid: null }
+  var resolved = resolve(tabs, name)
+  if (typeof resolved === "string") return { reply: resolved, uid: null }
+  return { reply: "ok", uid: single ? "overview" : resolved.uid }
+}
+function wheelLatched(state, now) {
+  return state.latched === true && now - state.at < QUIET_MS
+}
 function targetOf(ui, ctx) { return ui.moving ? active(ctx.catalogue).filter(function(s) { return s.uid === ui.moving.targetUid })[0] || null : null }
 function movePrompt(ui, ctx) {
   var target = targetOf(ui, ctx)
@@ -162,7 +174,7 @@ function reduce(ui, event, ctx) {
   } else if (key === "v") {
     next.horizonFilter = cycleFilter(next.horizonFilter || "all")
   } else if (!c.busy && c.item) {
-    var home = Model.homeOf(c.catalogue, Model.isOrphan(c.catalogue, c.item) ? "inbox" : c.item.stream)
+    var home = Model.homeStreamOf(c.catalogue, c.item)
     if (home) { next.moving = { id: c.item.id, targetUid: home.uid }; next.armedId = "" }
   }
   return { ui: next, actions: actions }

@@ -13,15 +13,8 @@ import "Keys.js" as KeyMap
 import "Streams.js" as Streams
 import "Tabs.js" as Tabs
 import "Order.js" as Order
-import "Cursor.js" as Cursor
 
-// The todo panel: the composition root. The BarWidget.qml entry point owns
-// the IPC target and lifecycle forwarding; this file picks the store
-// (`backend === "cli" ? cliStore : jsonStore`, PLAN §6.4), runs the view
-// machine through KeyMap.reduceUi, applies the actions it returns to the
-// store, and hosts the views (TaskList, ComposeView, DetailView,
-// StatusFooter). All logic lives in the .js libraries; this file binds and
-// forwards.
+// Composition root: bind pure views/reducers, forward IPC and store actions.
 Panel {
   id: root
 
@@ -56,9 +49,7 @@ Panel {
 
   // ---- state
   property var ui: KeyMap.initialUi()
-  // Rows ticked done during this panel session: id -> pre-tick status. Only
-  // the pruned map is read, so a reverted write or an external reopen drops
-  // the row from it at once (UX §4.5 done-row rule; PLAN A34b).
+  // Session-done visibility follows current status; rollbacks prune it.
   property string currentTab: "overview"
   property var clock: function() { return Date.now() }
   property double viewDayStart: 0
@@ -68,6 +59,8 @@ Panel {
   property var previousCatalogue: []
   property var wheelState: ({})
   property var strip: null
+  property int stripFirst: 1
+  readonly property bool wheelLatched: Tabs.wheelLatched(wheelState, clockNow)
   signal cursorScroll(bool reset)
   property var sessionDone: ({})
   readonly property var liveSessionDone: View.pruneSessionDone(sessionDone, items)
@@ -84,11 +77,12 @@ Panel {
   readonly property bool tabStripAvailable: metadata && store.loaded && Tabs.active(catalogue).length > 1
   readonly property bool stripShown: tabStripAvailable && ui.view === "list"
   readonly property string tabKey: currentTab === "overview" || currentTab === "done" ? currentTab : (tabs.filter(function(t) { return t.uid === root.currentTab })[0] || { key: "overview" }).key
-  readonly property var displayRows: metadata ? (currentTab === "done" ? Streams.doneRows(items, catalogue, viewOptions) : currentTab === "overview" && Tabs.active(catalogue).length > 1 ? Streams.overviewRows(items, catalogue, viewOptions) : Streams.tabRows(items, tabKey === "overview" ? "inbox" : tabKey, viewOptions)) : View.sortForList(View.visibleItems(items, liveSessionDone), liveSessionDone).map(function(it) { return { kind: "item", item: it, badge: "", streamCaption: "" } })
+  readonly property var displayRows: metadata ? Streams.viewRows(items, catalogue, tabKey, viewOptions) : View.sortForList(View.visibleItems(items, liveSessionDone), liveSessionDone).map(function(it) { return { kind: "item", item: it, badge: "", streamCaption: "" } })
+  readonly property string viewKey: Streams.viewKey(tabKey, catalogue)
   readonly property var viewOptions: ({ sessionDone: liveSessionDone, latches: latches, streams: catalogue, horizonFilter: ui.horizonFilter, dayStart: viewDayStart, reopened: sessionReopened })
   readonly property bool prioritySlot: metadata && Streams.prioritySlot(items)
   readonly property bool badgeSlot: metadata && Streams.badgeSlot(catalogue, items)
-  readonly property string countLabel: metadata ? Streams.countCaption(items, catalogue, tabKey, ui.horizonFilter, displayRows) : View.countLabel(items)
+  readonly property string countLabel: metadata ? Streams.countCaption(items, catalogue, viewKey, ui.horizonFilter, displayRows) : View.countLabel(items)
   readonly property string movePrompt: Tabs.movePrompt(ui, reducerCtx())
   readonly property var listItems: displayRows.filter(function(r) { return r.kind === "item" }).map(function(r) { return r.item })
   readonly property var focusLineModel: View.focusLine(items, focusModel, pomodoro)
@@ -108,13 +102,10 @@ Panel {
   // instead, and only once the first read has taken 300 ms.
   readonly property bool loading: !store.loaded && store.error === null
   property bool loadingShown: false
-  readonly property string emptyCopy: loading ? (loadingShown ? "Loading…" : "") : (store.loaded ? (metadata ? Streams.emptyCopy(items, tabKey === "overview" && Tabs.active(catalogue).length === 1 ? "inbox" : tabKey, ui.horizonFilter, displayRows) : (View.emptyCopy(items) || "")) : "")
+  readonly property string emptyCopy: loading ? (loadingShown ? "Loading…" : "") : (store.loaded ? (metadata ? Streams.emptyCopy(items, viewKey, ui.horizonFilter, displayRows) : (View.emptyCopy(items) || "")) : "")
   onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
-  // Change handlers below write `ui`; during construction the first
-  // evaluation of a readonly binding also emits its change signal, which
-  // would loop back into any binding that read `ui`, so they wait for
-  // Component.onCompleted.
+  // Defer change handlers until construction ends to avoid ui binding loops.
   property bool ready: false
 
   onStoreErrorChanged: if (ready) dispatch({ type: "storeError", error: storeError })
@@ -134,7 +125,7 @@ Panel {
       dispatch({ type: "resetCursor" })
       cursorScroll(true)
     }
-    var maps = Cursor.sessionMaps({ latches: latches, reopened: sessionReopened, sessionDone: sessionDone }, items, storeIdMap)
+    var maps = Order.sessionMaps({ latches: latches, reopened: sessionReopened, sessionDone: sessionDone }, items, storeIdMap)
     if (JSON.stringify(maps.latches) !== JSON.stringify(latches)) latches = maps.latches
     if (JSON.stringify(maps.reopened) !== JSON.stringify(sessionReopened)) sessionReopened = maps.reopened
     if (JSON.stringify(maps.sessionDone) !== JSON.stringify(sessionDone)) sessionDone = maps.sessionDone
@@ -233,9 +224,7 @@ Panel {
   function backToList() { dispatch({ type: "esc" }) }
   function beginCompose() { dispatch({ type: "key", key: "n" }) }
 
-  // Mouse twins of the keys (UX §4.6); each calls the same function. A
-  // delete button ("x") goes through the reducer with its row's id, so the
-  // first click arms and the second removes, as `x x` does.
+  // Mouse twins share key actions; delete still arms before removing.
   function rowKey(id, key) {
     var it = Model.findItem(items, id)
     var action = KeyMap.keyAction("list", key, { item: it, currentTab: currentTab, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
@@ -251,20 +240,11 @@ Panel {
   // remembers its pre-tick position first (UI-14).
   function perform(action) {
     if (errored) return Errors.unavailable(store.error)
-    var it = Model.findItem(items, action.id)
     var tick = currentTab === "done" ? null : View.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
-    if (tick && metadata) {
-      var home = Model.homeOf(catalogue, Model.isOrphan(catalogue, it) ? "inbox" : it.stream)
-      var peers = Streams.latchBlock(items, it, catalogue, latches, currentTab === "overview" && Tabs.active(catalogue).length > 1)
-      var held = Object.assign({}, latches)
-      held[it.id] = Order.latchOf(it, peers, home ? home.uid : undefined, tickSequence++)
-      latches = held
-    }
-    if (currentTab === "done" && it && it.status === "done" && action.type === "setStatus" && action.status === "todo") {
-      var reopened = Object.assign({}, sessionReopened)
-      if (!Object.prototype.hasOwnProperty.call(reopened, it.id)) reopened[it.id] = it.completedAt
-      sessionReopened = reopened
-    }
+    var ctx = { items: items, catalogue: catalogue, metadata: metadata, currentTab: currentTab }
+    var held = Order.recordTick({ latches: latches, tickSequence: tickSequence }, action, ctx)
+    latches = held.latches; tickSequence = held.tickSequence
+    sessionReopened = Order.recordReopen({ reopened: sessionReopened }, action, ctx)
     if (action.type === "setStatus") action.at = clock()
     var reply = store.perform(action, null)
     if (tick && reply === "ok") {
@@ -284,19 +264,17 @@ Panel {
   function wheelTab(ev) {
     if (!stripShown || ui.view !== "list") return
     var result = Tabs.wheel(wheelState, ev)
+    clockNow = ev.at
     wheelState = result.state
+    wheelQuiet.restart()
     if (result.step !== 0) dispatch({ type: "stepTab", direction: result.step })
   }
   function tab(name) {
-    var error = Tabs.unavailable(reducerCtx(), false)
-    if (error !== "") return error
-    if (Tabs.active(catalogue).length < 2 && Model.squish(name).toLowerCase() === "done") return Tabs.E21
-    var resolved = Tabs.resolve(tabs, name)
-    if (typeof resolved === "string") return resolved
-    var uid = Tabs.active(catalogue).length < 2 ? "overview" : resolved.uid
-    if (ui.view === "list") selectTab(uid)
-    else currentTab = uid
-    return "ok"
+    var result = Tabs.ipcTab(tabs, name, reducerCtx())
+    if (result.reply !== "ok") return result.reply
+    if (ui.view === "list") selectTab(result.uid)
+    else currentTab = result.uid
+    return result.reply
   }
 
   function openTask(id) {
@@ -376,6 +354,12 @@ Panel {
     target: root.store
     function onFailed(error) { root.showMessage(Errors.msgNotSaved(error)) }
     function onSyncFinished(result) { if (!result.ok && result.message) root.showMessage(result.message) }
+  }
+
+  Timer {
+    id: wheelQuiet
+    interval: Tabs.QUIET_MS
+    onTriggered: root.wheelState = ({})
   }
 
   Timer {

@@ -40,27 +40,3 @@ function scrollTo(contentY, viewHeight, rowY, rowHeight) {
   if (rowY + rowHeight > contentY + viewHeight) return Math.max(0, rowY + rowHeight - viewHeight)
   return contentY
 }
-
-// Translate every task identity in the session, including peer snapshots.
-// Reopen latches survive status changes; tick latches survive only done.
-function sessionMaps(state, items, idMap) {
-  var out = { latches: {}, reopened: {}, sessionDone: {} }, map = idMap || {}
-  function real(id) { return Queue.realId(id, map) }
-  function find(id) { return items.filter(function(it) { return it.id === id })[0] || null }
-  var latches = state.latches || {}, reopened = state.reopened || {}, done = state.sessionDone || {}
-  for (var id in latches) {
-    var rid = real(id), it = find(rid)
-    if (!it || it.status !== "done") continue
-    var latch = {}, peers = {}
-    for (var k in latches[id]) latch[k] = latches[id][k]
-    for (var peer in latch.peers) peers[real(peer)] = latch.peers[peer]
-    latch.id = rid; latch.peers = peers
-    out.latches[rid] = latch
-  }
-  for (var r in reopened) if (find(real(r))) out.reopened[real(r)] = reopened[r]
-  for (var d in done) {
-    var task = find(real(d))
-    if (task && task.status === "done") out.sessionDone[real(d)] = done[d]
-  }
-  return out
-}

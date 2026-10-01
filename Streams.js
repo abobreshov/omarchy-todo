@@ -13,20 +13,19 @@ var COPY = [
 function horizonCopy(h) { return COPY[Math.max(0, Order.HORIZONS.indexOf(h))] }
 function cycleFilter(f) { return Tabs.cycleFilter(f) }
 function matches(it, filter) { return !filter || filter === "all" || it.horizon === filter }
-function active(streams) { return streams.filter(function(s) { return s.archivedAt === null }) }
+function active(streams) { return Model.activeStreams(streams) }
 function prioritySlot(items) { return items.some(function(it) { return it.priority !== null && it.priority !== undefined }) }
 function badgeSlot(streams, items) { return active(streams).length > 1 || items.some(function(it) { return it.horizon !== "short" || (it.size !== null && it.size !== undefined) }) }
 function effectiveHome(it, streams, latch) {
-  if (latch && latch.streamUid !== undefined) {
-    var held = streams.filter(function(s) { return s.uid === latch.streamUid })[0]
-    if (held) return held.key
-  }
-  return Model.isOrphan(streams, it) ? "inbox" : it.stream
+  return Order.homeKeyOf(it, streams, latch)
+}
+function streamCaptionOf(it, streams) {
+  var home = Model.homeOf(streams, it.stream)
+  return home ? (home.system ? "Inbox" : home.archivedAt !== null ? Model.pillLabel(home.name, 10) : Tabs.labelOf(home, active(streams))) : Model.pillLabel(it.stream, 10)
 }
 function itemRow(it, badge, streams, doneTab) {
-  var home = Model.homeOf(streams, it.stream)
   return { kind: "item", item: it, selectable: true, badge: badge,
-    streamCaption: doneTab ? (home ? (home.system ? "Inbox" : home.archivedAt !== null ? Model.pillLabel(home.name, 10) : Tabs.labelOf(home, active(streams))) : Model.pillLabel(it.stream, 10)) : "" }
+    streamCaption: doneTab ? streamCaptionOf(it, streams) : "" }
 }
 function heldFor(it, opts) {
   return it.status === "done" && opts.latches && opts.latches[it.id] ? opts.latches[it.id] : null
@@ -109,16 +108,19 @@ function composeTarget(tab, filter) {
   return out
 }
 
-function blockOf(it, latch, overview) {
-  var h = latch ? latch.horizon : it.horizon, status = latch ? latch.status : it.status
-  return overview ? "all" : status === "doing" || h === "short" ? "short" : h
+function blockOf(it, latch, overview) { return Order.blockOf(it, latch, overview) }
+function latchBlock(items, item, streams, latches, overview) { return Order.latchBlock(items, item, streams, latches, overview) }
+
+// The view keeps Overview's E1/E2 copy even when only the Inbox exists.
+function viewKey(tab, catalogue) {
+  return active(catalogue).length < 2 ? "overview" : tab
 }
-function latchBlock(items, item, streams, latches, overview) {
-  var home = effectiveHome(item, streams, null), block = blockOf(item, null, overview)
-  return items.filter(function(it) {
-    var l = it.status === "done" && latches ? latches[it.id] : null
-    return effectiveHome(it, streams, l) === home && blockOf(it, l, overview) === block
-  })
+function viewRows(items, catalogue, tab, options) {
+  var opts = Object.assign({}, options || {}, { streams: catalogue })
+  var key = viewKey(tab, catalogue)
+  if (key === "done") return doneRows(items, catalogue, opts)
+  if (key === "overview" && active(catalogue).length > 1) return overviewRows(items, catalogue, opts)
+  return tabRows(items, key === "overview" ? "inbox" : key, opts)
 }
 
 function composeCaption(tab, filter, stripShown) {

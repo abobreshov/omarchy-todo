@@ -29,19 +29,6 @@ test('scroll minimally to show the whole cursor row',()=>{
 });
 
 
-test('session identities and peer priorities translate and prune without dropping zero',()=>{
-  const held={id:'t1',status:'todo',priority:0,horizon:'short',streamUid:'s1',peers:{t2:0,3:null},tickOrder:0};
-  const state={latches:{t1:held,4:{...held,id:'4'}},reopened:{t2:'instant',gone:'instant'},sessionDone:{t1:'todo',4:'todo',gone:'doing'}};
-  const items=[task(22,{status:'done'}),task(23),task(4)];
-  const maps=C.sessionMaps(state,items,{t1:'22',t2:'23'});
-  assert.deepEqual(Object.keys(maps.latches),['22']);
-  assert.deepEqual(maps.latches[22].peers,{23:0,3:null}); assert.equal(maps.latches[22].id,'22');
-  assert.deepEqual(maps.reopened,{23:'instant'}); assert.deepEqual(maps.sessionDone,{22:'todo'});
-  assert.deepEqual(C.sessionMaps({},[]),{latches:{},reopened:{},sessionDone:{}});
-  assert.equal(state.latches.t1.peers.t2,0);
-});
-
-
 test('Done opens on the first item under its newest day, even with global focus',()=>{
   const rows=[{kind:'focus',selectable:true},{kind:'day'},row(6),row(5)];
   assert.equal(C.firstSelectable(rows,true),2);

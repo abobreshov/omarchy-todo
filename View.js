@@ -276,7 +276,7 @@ function dumpView(state) {
   var catalogue = s.catalogue || s.streams || []
   var tab = metadata ? s.tab || "overview" : "overview"
   var opts = { sessionDone: sessionDone, latches: s.latches, horizonFilter: s.horizonFilter || "all", dayStart: s.dayStart, streams: catalogue, reopened: s.reopened }
-  var rows = s.displayRows || (metadata ? (tab === "done" ? Streams.doneRows(items, catalogue, opts) : tab === "overview" && Tabs.active(catalogue).length > 1 ? Streams.overviewRows(items, catalogue, opts) : Streams.tabRows(items, tab === "overview" ? "inbox" : tab, opts)) : visibleItems(sorted, sessionDone).map(function(it) { return { kind: "item", item: it, badge: "" } }))
+  var rows = s.displayRows || (metadata ? Streams.viewRows(items, catalogue, tab, opts) : visibleItems(sorted, sessionDone).map(function(it) { return { kind: "item", item: it, badge: "" } }))
   return {
     tab: tab,
     streams: metadata ? Tabs.active(catalogue).map(function(st) { return { uid: st.uid, key: st.key, open: st.open } }) : [],
@@ -307,5 +307,5 @@ function dumpView(state) {
 
 function focusCaption(line, catalogue, tab, metadata) {
   if (!metadata || !line || !line.item || Tabs.active(catalogue).length < 2 || line.item.stream === tab) return ""
-  return Streams.itemRow(line.item, "", catalogue, true).streamCaption
+  return Streams.streamCaptionOf(line.item, catalogue)
 }

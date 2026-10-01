@@ -75,3 +75,31 @@ test('angle and pixel accumulation, axis ratio, one gesture one tab (AC-ST.10b,4
   assert.equal(T.shiftWheel({}, {py:48,ay:1}).step,-1);
   assert.deepEqual(T.wheel(null).state,{x:0,y:0,latched:false,at:0});
 });
+
+test('tab IPC resolves once, preserves replies and collapses Inbox-only navigation', () => {
+  const ctx={backend:'cli',hasStreams:true,catalogue:streams};
+  const tabs=T.tabsOf(streams);
+  for (const name of ['Tellkin','work:tellkin','2']) assert.deepEqual(T.ipcTab(tabs,name,ctx),{reply:'ok',uid:'s1'});
+  assert.deepEqual(T.ipcTab(tabs,'done',ctx),{reply:'ok',uid:'done'});
+  assert.deepEqual(T.ipcTab(tabs,'missing',ctx),{reply:'unknown stream',uid:null});
+  const same=streams.map(s=>s.uid==='s9'?{...s,name:'tellkin',key:'personal: tellkin'}:s);
+  assert.deepEqual(T.ipcTab(T.tabsOf(same),'tellkin',{...ctx,catalogue:same}),{reply:'ambiguous stream',uid:null});
+  const single={...ctx,catalogue:streams.slice(0,1)};
+  for (const name of ['inbox','1','overview','0']) assert.deepEqual(T.ipcTab(T.tabsOf(single.catalogue),name,single),{reply:'ok',uid:'overview'});
+  assert.deepEqual(T.ipcTab(T.tabsOf(single.catalogue),'done',single),{reply:T.E21,uid:null});
+  for (const [change,reply] of [[{backend:'json'},T.E22],[{hasStreams:false},T.E23]]) assert.deepEqual(T.ipcTab(tabs,'done',{...ctx,...change}),{reply,uid:null});
+});
+
+test('Inbox tooltip includes active orphans and archived homes, excluding done', () => {
+  const tasks=[task(1,{stream:'inbox'}),task(2,{stream:'missing',status:'doing'}),task(3,{stream:'work: old'}),task(4,{stream:'missing',status:'done'}),task(5)];
+  assert.equal(T.tooltipOf(T.tabsOf(streams)[1],tasks,0,streams),'Inbox\n3 open · 1 doing\nKey 1');
+});
+
+test('wheel latch expires at quiet threshold and drift never latches', () => {
+  let r=T.wheel({}, {ax:-60,ay:-120,at:1});
+  assert.equal(T.wheelLatched(r.state,20),false);
+  r=T.wheel({}, {ax:-120,at:1});
+  assert.equal(T.wheelLatched(r.state,100),true);
+  assert.equal(T.wheelLatched(r.state,301),false);
+  assert.equal(T.wheelLatched({},1),false);
+});

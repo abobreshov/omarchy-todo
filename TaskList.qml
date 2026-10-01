@@ -76,7 +76,7 @@ Column {
     height: Math.min(contentHeight, Math.max(0, list.maxHeight - pinned.implicitHeight - help.implicitHeight - 2 * list.spacing))
     contentWidth: width; contentHeight: content.implicitHeight
     clip: true; boundsBehavior: Flickable.StopAtBounds
-    interactive: contentHeight > height && !horizontalWheel.active
+    interactive: contentHeight > height && !list.panel.wheelLatched
     flickableDirection: Flickable.VerticalFlick
     Column {
       id: content

@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { lib, here, item, target } from "./helpers.mjs";
+import { lib, here, item, target, NOW } from "./helpers.mjs";
 
 const Model = lib("Model.js");
 const Store = lib("Store.js");
@@ -145,14 +145,14 @@ test("addItem squishes, refuses an empty name and returns the clean name", () =>
 test("setStatus: done and todo clear the focus link, doing keeps it, unknown ids and bad statuses are refused", () => {
   const items = [item("1", "A", "doing"), item("2", "B", "todo")];
   const focus = { text: "T", taskId: "1" };
-  let r = Store.setStatus({ items, focus }, "1", "done");
+  let r = Store.setStatus({ items, focus }, "1", "done", NOW);
   assert.equal(r.reply, "ok");
   assert.equal(r.doc.items[0].status, "done");
   assert.deepEqual(r.doc.focus, { text: "T", taskId: null });
-  assert.deepEqual(r.action, { type: "setStatus", id: "1", status: "done" });
-  r = Store.setStatus({ items, focus }, "1", "todo");
+  assert.deepEqual(r.action, { type: "setStatus", id: "1", status: "done", at: NOW });
+  r = Store.setStatus({ items, focus }, "1", "todo", NOW);
   assert.equal(r.doc.focus.taskId, null);
-  r = Store.setStatus({ items, focus }, 2, "doing");
+  r = Store.setStatus({ items, focus }, 2, "doing", NOW);
   assert.equal(r.doc.items[1].status, "doing");
   assert.equal(r.doc.focus.taskId, "1");
   assert.equal(r.action.id, "2", "ids are stringified");
@@ -215,7 +215,7 @@ test("reduce: one action vocabulary, one result shape, frozen inputs untouched",
   const doc = Object.freeze({ items, focus: Object.freeze({ text: "T", taskId: null }) });
   const accepted = [
     { type: "add", name: " New ", description: "" },
-    { type: "setStatus", id: 1, status: "doing" },
+    { type: "setStatus", id: 1, status: "doing", at: NOW },
     { type: "focus", id: 1 },
     { type: "focus", id: "clear" },
     { type: "toggleStep", id: "1", n: "1" },

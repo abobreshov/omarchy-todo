@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { here } from './helpers.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { lib } from './helpers.mjs';
@@ -104,4 +107,27 @@ test("compose headers name the target and inherited non-short horizon",()=>{
   assert.equal(S.composeCaption('work: tellkin','mid',true),'New todo · work: tellkin · mid-term');
   assert.equal(S.composeCaption('overview','yearly',false),'New todo · yearly');
   assert.equal(S.composeCaption('overview','all',false),'New todo');
+});
+
+test("view selection shares grouping with dump and preserves Inbox-only E1/E2", () => {
+  const migrated = lib('Store.js').fromCli(JSON.parse(fs.readFileSync(path.join(here, 'fixtures/provisional/board-migrated.json'), 'utf8')));
+  for (const tab of ['overview', 'inbox']) {
+    assert.equal(S.viewKey(tab, migrated.streams), 'overview');
+    const empty = S.viewRows([], migrated.streams, tab);
+    assert.equal(S.emptyCopy([], S.viewKey(tab, migrated.streams), 'all', empty), 'Nothing here yet. Press + to add a todo.');
+    const done = migrated.items.map(it => ({...it, status:'done', completedAt:'2026-09-29T09:00:00Z'}));
+    const rows = S.viewRows(done, migrated.streams, tab, {dayStart:Date.parse('2026-09-30T00:00:00Z')});
+    assert.deepEqual(rows, []);
+    assert.equal(S.emptyCopy(done, S.viewKey(tab, migrated.streams), 'all', rows), 'All clear. Press + to add a todo.');
+  }
+  const items = [task(1),task(2,{stream:'inbox'}),task(3,{status:'done',completedAt:'2026-09-30T09:00:00Z'})];
+  const opts = { dayStart:Date.parse('2026-09-30T00:00:00Z'), horizonFilter:'all' };
+  for (const tab of ['overview','work: tellkin','done']) {
+    const expectedRows = tab === 'overview' ? S.overviewRows(items,streams,opts) : tab === 'done' ? S.doneRows(items,streams,opts) : S.tabRows(items,tab,{...opts,streams});
+    assert.deepEqual(S.viewRows(items,streams,tab,opts), expectedRows);
+    const dump = V.dumpView({backend:'cli',hasStreams:true,items,catalogue:streams,tab,dayStart:opts.dayStart});
+    assert.deepEqual(dump.rows.filter(r=>r.kind==='item').map(r=>r.id), expectedRows.filter(r=>r.kind==='item').map(r=>r.item.id));
+  }
+  assert.deepEqual(S.viewRows([], [], 'overview'), []);
+  assert.equal(S.streamCaptionOf(task(1),streams), S.itemRow(task(1),'',streams,true).streamCaption);
 });

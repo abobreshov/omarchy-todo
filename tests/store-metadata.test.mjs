@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { lib, here } from "./helpers.mjs";
+import { lib, here, NOW } from "./helpers.mjs";
 
 const Store = lib("Store.js");
 const Queue = lib("Queue.js");
@@ -175,7 +175,7 @@ test("UI-30 d: every existing copy reducer keeps all metadata before the next re
   const doc = Store.fromCli(board);
   Object.assign(get(doc, "3"), { labels: ["q4"], priority: 0, size: "M" });
   for (const action of [{ type: "setStatus", id: 3, status: "done" }, { type: "focus", id: 3 }, { type: "toggleStep", id: 3, n: 1 }]) {
-    const r = Store.reduce(doc, action);
+    const r = Store.reduce(doc, action, NOW);
     assert.equal(r.ok, true);
     assert.deepEqual(metadata(get(r.doc, "3")), { stream: "work: tellkin", labels: ["q4"], horizon: "short", priority: 0, size: "M" });
     assert.notEqual(get(r.doc, "3").labels, get(doc, "3").labels);
@@ -199,4 +199,17 @@ test("AC-ST.61: completedAt maps, stamps, clears, survives queue rebase and roll
   assert.equal(get(Queue.rebase(before, []).doc, "3").completedAt, null);
   const copied = Model.copyItem(get(done.doc, "3"));
   assert.equal(copied.completedAt, new Date(now).toISOString());
+});
+
+test("setStatus refuses a missing clock without changing any field", () => {
+  const parsed = Store.fromCli(board);
+  const doc = { items: parsed.items, focus: parsed.focus };
+  for (const status of ["done", "todo", "doing"]) {
+    for (const at of [undefined, null]) {
+      const r = Store.reduce(doc, { type: "setStatus", id: "3", status, at });
+      assert.equal(r.reply, "missing clock");
+      assert.deepEqual(r.doc, doc);
+      assert.equal(r.action, null);
+    }
+  }
 });

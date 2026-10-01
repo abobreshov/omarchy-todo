@@ -39,6 +39,10 @@ QtObject {
   property var items: []
   property var displayRows: []
   property var strip: null
+  property int stripFirst: 1
+  property double wheelNow: 0
+  readonly property bool wheelLatched: Tabs.wheelLatched(wheelState, wheelNow)
+  property Timer wheelQuiet: Timer { interval: Tabs.QUIET_MS; onTriggered: panel.wheelState = ({}) }
   property double viewDayStart: Order.dayStartOf(Date.parse("2026-09-30T12:00:00+01:00"))
   property var wheelState: ({})
   signal cursorScroll(bool reset)
@@ -51,6 +55,9 @@ QtObject {
     r.actions.forEach(function(a) { if (a.type === "selectTab") panel.selectTab(a.uid) })
   }
   function wheelTab(ev) {
+    if (!stripShown || ui.view !== "list") return
+    wheelNow = ev.at
+    wheelQuiet.restart()
     var r = Tabs.wheel(wheelState, ev)
     wheelState = r.state
     if (r.step !== 0) dispatch({ type: "stepTab", direction: r.step })

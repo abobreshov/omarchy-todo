@@ -246,8 +246,9 @@ function setStatus(doc, id, status, now) {
   var s = Model.normalizeStatus(status)
   if (s !== String(status)) return refused(d, "bad status")
   if (!Model.findItem(d.items, id)) return refused(d, "unknown id")
+  if (now === undefined || now === null) return refused(d, "missing clock")
   var items = replaceItem(d.items, id, function(it) {
-    it.completedAt = s === "done" ? (it.status === "done" ? it.completedAt : new Date(now === undefined ? 0 : now).toISOString()) : null
+    it.completedAt = s === "done" ? (it.status === "done" ? it.completedAt : new Date(now).toISOString()) : null
     it.status = s
   })
   // A focused task is always doing: leaving doing clears the link, the

@@ -257,3 +257,13 @@ test("completedAt is carried through normalization and copies (AC-ST.61)", () =>
     assert.equal(Model.copyItem(it).completedAt, value);
   }
 });
+
+test("one home rule returns the Inbox for open orphans and keeps archived done homes", () => {
+  const catalogue=[{uid:'I',key:'inbox',archivedAt:null},{uid:'A',key:'active',archivedAt:null},{uid:'X',key:'old',archivedAt:'instant'}];
+  assert.deepEqual(Model.activeStreams(catalogue),catalogue.slice(0,2));
+  assert.deepEqual(Model.activeStreams(null),[]);
+  for (const stream of ['missing','old']) assert.equal(Model.homeStreamOf(catalogue,{stream,status:'todo'}).uid,'I');
+  assert.equal(Model.homeStreamOf(catalogue,{stream:'active',status:'todo'}).uid,'A');
+  assert.equal(Model.homeStreamOf(catalogue,{stream:'old',status:'done'}).uid,'X');
+  assert.equal(Model.homeStreamOf(catalogue,{stream:'missing',status:'done'}),null);
+});
