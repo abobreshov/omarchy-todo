@@ -4,9 +4,12 @@
 // tests/fixtures/contract/ are generated from todocli by its tests/contract.rs
 // and vendored here byte for byte (tests/contract.test.mjs pins them).
 //   - logs argv (and the TODOCLI_* env) as one JSON line to $FAKE_LOG when set
-//   - `board` replays $FAKE_BOARD when set, else contract/board.json
+//   - `board` replays $FAKE_BOARD when set (a path, or the bare name of a
+//     contract fixture such as board-streams.json), else contract/board.json
 //   - a write replays contract/write-<verb>.json (`focus` picks the
-//     `--task` or `--clear` reply); `sync` replays contract/sync-all.json
+//     `--task` or `--clear` reply; `label`/`unlabel` share write-label.json;
+//     S9 adds move, horizon, priority, size); `sync` replays
+//     contract/sync-all.json
 //   - `FAKE_EXIT=<n>` exits with that code after printing the real §3.5
 //     envelope, contract/envelope-<$FAKE_KIND>.json (the kind by exit code
 //     when unset: 75 busy, 127 missing… else error), unless FAKE_STDOUT
@@ -43,14 +46,17 @@ if (process.env.FAKE_EXIT && process.env.FAKE_EXIT !== "0") {
   if (process.env.FAKE_STDERR) process.stderr.write(process.env.FAKE_STDERR);
   process.exit(code);
 }
+const boardFile = process.env.FAKE_BOARD;
 if (cmd === "board" || cmd === "list" || cmd === "render") {
-  process.stdout.write(process.env.FAKE_BOARD ? fs.readFileSync(process.env.FAKE_BOARD, "utf8") : contract("board.json"));
+  process.stdout.write(!boardFile ? contract("board.json") : boardFile.includes("/") ? fs.readFileSync(boardFile, "utf8") : contract(boardFile));
 } else if (cmd === "sync") {
   process.stdout.write(contract("sync-all.json"));
 } else if (cmd === "focus") {
   process.stdout.write(contract(rest.includes("--clear") ? "write-focus-clear.json" : "write-focus-task.json"));
-} else if (["add", "start", "done", "reopen", "step", "rm"].includes(cmd)) {
+} else if (["add", "start", "done", "reopen", "step", "rm", "move", "horizon", "priority", "size"].includes(cmd)) {
   process.stdout.write(contract("write-" + cmd + ".json"));
+} else if (cmd === "label" || cmd === "unlabel") {
+  process.stdout.write(contract("write-label.json"));
 } else {
   process.stderr.write("fake todocli: no contract reply for " + JSON.stringify(argv) + "\n");
   process.exit(1);

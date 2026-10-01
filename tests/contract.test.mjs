@@ -28,7 +28,8 @@ const fake = path.join(here, "fakebin", "todocli");
 // sha256 of every vendored golden; todocli's tests/contract.rs regenerates
 // them and fails when a sibling checkout's copy differs.
 const PINS = {
-  "board.json": "75ede613ca3e18ae05655977338be9f39bdc060af34e0457e75345634e0b2769",
+  "board-streams.json": "ec6551e4b8a995265f14556f3f33be8ff2b2273c0c83f29ab3ae51496d9233c0",
+  "board.json": "03439cd8dd85a61d8afd710a7a7ba6a0b42347670ae463deb1e50d6ce0edd59d",
   "envelope-auth.json": "df0146f24ce4d920f1a3553f1bf5c0c99be3b3a0cd09e78be9e4ec5ca5888373",
   "envelope-auth_unreachable.json": "c37cf36963da0cce37bdd78a18b66d391eddd20ecb2c5585bde0cf25f8e6dcb0",
   "envelope-busy.json": "2b817a4aed957e7e460762f5da85d4ca1ed25d1b85ba6a3b00184008665e6d45",
@@ -48,15 +49,21 @@ const PINS = {
   "pomodoro-interrupt.json": "b7dcfcbbf95a23ee59bdb561e26967181d9ffc9c2b715f728ff8130a5cea68db",
   "pomodoro-retarget.json": "26a560cea71bc863a2d2a0e56cb407a1924bde3a94ae7804d8e186aefa87ad99",
   "pomodoro-start.json": "a553305b029ad90ee0b1903e5b2bcd9d9e886f519032b0510a35772e1a7989c2",
+  "show-task.json": "a4c5eb9120de481b3dccd2f8f137ee3c99af7f118329f484e7e65fa8bb0b998e",
   "sync-all.json": "c333d520c5d7c5c5570e8f47975d657026619a672664876d75cb07dae87c1f68",
-  "write-add.json": "b040aa1f72f0818982eb5463f5fded4a4937ffad8aa5bfd1ac37deb6999b32e8",
-  "write-done.json": "624a60cdf8eaf62ea84fb6dc6322b23bc4176ec5b77421bc6c533b6e1e26dad7",
+  "write-add.json": "304f1abcf1d1aaa4fd1e8883bf791167e27961269deba8dfc1bbb111f1cc22d3",
+  "write-done.json": "4b49b54e690f599577b4f6800f6fe83d9b0e614fdd990b9dca8fc114665fd528",
   "write-focus-clear.json": "3368ea498e9490c52f7abc4589f078bdab156aa1c313e44706a2bbe4a005b39f",
   "write-focus-task.json": "2133d780e1b89c33588ad5e8299db29a9e32458e4927564ad0e801f77fcb3ab4",
-  "write-reopen.json": "799b7b04d6ff8c3f62c7c7427c3ad454df9dbfa32506a76ad933a1b4d2de1a37",
-  "write-rm.json": "a461205368529a353658c166f463194bbd3cc6bbc28d115bad03644e988c1e80",
-  "write-start.json": "ccd6a9b759a57724135988e0e1733daba6aa909b8e14400dcee6fe26c48bc593",
-  "write-step.json": "bb065a8dbb69a8a0ac5fe4c0004c57665e59784771cefa53694b2c4423bd951d",
+  "write-horizon.json": "1db4a0e1bebe1356abb5c9c888a306f55526ecd0db3dba7be556831bcf8b0f9b",
+  "write-label.json": "9a0d85f0f04ae8850c808cb79de03e43eef6f16737c5584b28e059a8d6c0896c",
+  "write-move.json": "6c33de52a7e80ef5f0086eb9966646320bde36837221b0354b69cefff2df84c1",
+  "write-priority.json": "ce23c154ef2525846532b62900f5f8882828f5971c923dc78d28b01901df6340",
+  "write-reopen.json": "967588abbeca14b871c14dd5cfd18afd313b34d1f3b0ad4abf21650d64620791",
+  "write-rm.json": "f28f38df7972fae482666ebee02a51e9a976829dedf1e8131e56bd96d1b33b4d",
+  "write-size.json": "f5acd03cf6bff1a29890ad70c90787469cebb0111f87fc1fb37b20a2c6f9148b",
+  "write-start.json": "8c02444089597e3c016573da9a012a1cf4abde996ca8710739020eacb51f7870",
+  "write-step.json": "d336fe748925b9801d9efe12c1d7c2c474cd069a4bf2ab7608db1ab72241ddd6",
 };
 
 const golden = (name) => fs.readFileSync(path.join(dir, name), "utf8");
@@ -108,6 +115,35 @@ test("the goldens are the shapes this panel parses: the board, every write reply
   }
 });
 
+// CONTRACT-S9 §12.1: the S9 goldens, located by id, never by array index
+// (the streams order is pinned by §8, so an index is allowed there).
+test("the S9 goldens carry the five task keys, the streams catalogue and typed details", () => {
+  const streams = JSON.parse(golden("board-streams.json"));
+  assert.deepEqual(Object.keys(streams), ["version", "focus", "focus_task", "tasks", "streams", "sync", "stamp"]);
+  assert.deepEqual(streams.tasks.map((t) => t.id), [1, 2, 3, 4, 5, 6, 7, 8], "id order, the doing #3 third");
+  assert.equal(streams.tasks.find((t) => t.id === 2).priority, 0);
+  assert.equal(streams.tasks.find((t) => t.id === 4).priority, 90);
+  assert.equal(streams.tasks.find((t) => t.id === 3).size, "XL");
+  assert.equal(typeof streams.streams[3].archivedAt, "string");
+  assert.deepEqual(streams.streams.map((s) => [s.key, s.open]), [["inbox", 2], ["work: tellkin", 3], ["personal: goals", 2], ["work: old", 0]]);
+  assert.deepEqual(streams.sync.map((t) => t.name), ["obsidian"]);
+  const show = JSON.parse(golden("show-task.json"));
+  assert.equal(show.priority, 75);
+  assert.equal(show.events.find((e) => e.kind === "priority_changed").detail.new, 75);
+  assert.equal(show.events.find((e) => e.kind === "priority_changed").detail.old, 0);
+  assert.deepEqual(show.events.find((e) => e.kind === "labels_changed").detail, { old: [], new: ["lease"] });
+  for (const verb of ["move", "horizon", "label", "priority", "size"]) {
+    const reply = JSON.parse(golden("write-" + verb + ".json"));
+    for (const key of ["stream", "labels", "horizon", "priority", "size"]) assert.ok(Object.hasOwn(reply, key), verb + " carries " + key);
+    assert.equal(Object.hasOwn(reply, "events"), false, verb + " is a write reply");
+    assert.equal(Queue.rememberId({}, "tmp", golden("write-" + verb + ".json")).tmp, String(reply.id));
+  }
+  assert.equal(JSON.parse(golden("write-horizon.json")).size, null, "the promotion cleared XL");
+  const board = JSON.parse(golden("board.json"));
+  assert.deepEqual(board.streams.map((s) => [s.key, s.open]), [["inbox", 1]], "the migrated-only store");
+  for (const t of board.tasks) assert.deepEqual([t.stream, t.labels, t.horizon, t.priority, t.size], ["inbox", [], "short", null, null]);
+});
+
 test("the fake replays the goldens by verb and prints the real envelope on FAKE_EXIT", () => {
   assert.equal(runArgv(Argv.forAction(fake, { type: "read" })).stdout, golden("board.json"));
   assert.equal(runArgv(Argv.forAction(fake, { type: "add", name: "x", description: "" })).stdout, golden("write-add.json"));
@@ -119,6 +155,14 @@ test("the fake replays the goldens by verb and prints the real envelope on FAKE_
   assert.equal(runArgv(Argv.forAction(fake, { type: "focus", id: "clear" })).stdout, golden("write-focus-clear.json"));
   assert.equal(runArgv(Argv.forAction(fake, { type: "remove", id: "3" })).stdout, golden("write-rm.json"));
   assert.equal(runArgv(Argv.forAction(fake, { type: "syncNow" })).stdout, golden("sync-all.json"));
+  const s9 = (...rest) => runArgv([fake, "--source", "omarchy", "--json", ...rest]).stdout;
+  assert.equal(s9("move", "1", "work: tellkin"), golden("write-move.json"));
+  assert.equal(s9("horizon", "3", "mid"), golden("write-horizon.json"));
+  assert.equal(s9("label", "5", "running"), golden("write-label.json"));
+  assert.equal(s9("unlabel", "5", "running"), golden("write-label.json"));
+  assert.equal(s9("priority", "2", "75"), golden("write-priority.json"));
+  assert.equal(s9("size", "7", "M"), golden("write-size.json"));
+  assert.equal(runArgv(Argv.forAction(fake, { type: "read" }), { FAKE_BOARD: "board-streams.json" }).stdout, golden("board-streams.json"), "FAKE_BOARD names a contract fixture");
   const held = runArgv(Argv.forAction(fake, { type: "syncNow" }), { FAKE_EXIT: "75", FAKE_KIND: "sync_held" });
   assert.equal(held.code, 75);
   assert.equal(held.stdout, golden("envelope-sync_held.json"));
