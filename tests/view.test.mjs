@@ -16,7 +16,7 @@ const expected = JSON.parse(fs.readFileSync(path.join(here, "fixtures/consumer/e
 
 test("dump.open carries eight metadata keys, zero and copied labels in unchanged list order", () => {
   const doc = boardFixture("provisional/board-streams.json");
-  const dump = View.dumpView({ ...doc, sessionDone: { 8: true } });
+  const dump = View.dumpView({ backend: "cli", ...doc, sessionDone: { 8: true } });
   assert.deepEqual(dump.open.map((it) => it.id), ["3", "1", "2", "4", "5", "6", "7"]);
   for (const entry of dump.open) {
     assert.deepEqual(Object.keys(entry), ["id", "title", "status", "stream", "horizon", "labels", "priority", "size"]);
@@ -32,19 +32,19 @@ test("dump.open carries eight metadata keys, zero and copied labels in unchanged
 
 test("dump.open flags only missing or archived homes and retains the task's own stream", () => {
   const doc = boardFixture("consumer/board-archived-home.json");
-  const dump = View.dumpView(doc);
+  const dump = View.dumpView({ backend: "cli", ...doc });
   const orphans = dump.open.filter((it) => it.orphan === true);
   const oracle = expected["board-archived-home.json"];
   assert.deepEqual(orphans.map((it) => Number(it.id)), oracle.orphanIds);
   assert.deepEqual(Object.fromEntries(orphans.map((it) => [it.id, it.stream])), oracle.streams);
   assert.equal(dump.open.filter((it) => Object.hasOwn(it, "orphan")).length, oracle.orphanIds.length);
-  assert.equal(View.dumpView({ ...doc, streams: null }).open.every((it) => it.orphan === true), true);
+  assert.equal(View.dumpView({ backend: "cli", ...doc, streams: null }).open.every((it) => it.orphan === true), true);
 });
 
 test("older cli and json dump.open retain today's three keys; done is unchanged", () => {
   const doc = boardFixture("consumer/board-old-cli.json");
   for (const hasStreams of [false, undefined]) {
-    const dump = View.dumpView({ ...doc, hasStreams, sessionDone: { 5: true } });
+    const dump = View.dumpView({ backend: "cli", ...doc, hasStreams, sessionDone: { 5: true } });
     assert.deepEqual(dump.open, [{ id: "3", title: "Wire the webhook", status: "doing" }]);
     dump.open.forEach((it) => assert.deepEqual(Object.keys(it), expected["board-old-cli.json"].dump.openKeys));
     assert.deepEqual(dump.done, [{ id: "5", title: "Closed one" }]);
@@ -255,6 +255,8 @@ test("dumpView produces the UX §10.3 shape", () => {
   };
   const d = View.dumpView(state);
   assert.deepEqual(d, {
+    tab: "overview", streams: [], strip: null, horizonFilter: "all", moving: null,
+    rows: [items[0], items[2], items[1]].map(it => ({ kind: "item", id: it.id, status: it.status, stream: null, horizon: null, priority: null, size: null, badge: "" })),
     version: 1, backend: "cli", cliPath: "todocli", view: "list", stale: false, error: null,
     pill: state.pill,
     focus: { text: "Ship the invoice-export slice", taskId: "12" },
@@ -277,4 +279,38 @@ test("dumpView produces the UX §10.3 shape", () => {
   assert.deepEqual(bare.done, []);
   assert.equal(bare.footer, null);
   assert.equal(bare.pill.glyph, G.icon);
+});
+
+
+test("P2 help lines, metadata rows, empty scopes, move targets and degraded modes", () => {
+  const doc=boardFixture("provisional/board-streams.json");
+  assert.equal(View.helpLine("list","cli",true,true,"overview"),"n new · d done · s doing · f focus · p pomodoro · m move · [ ] 0-9 tabs · v horizon · x x or Del delete · r reload · R sync · Tab next panel");
+  assert.equal(View.helpLine("list","cli",true,false,"overview").includes("m move"),false);
+  assert.equal(View.helpLine("list","cli",true,false,"overview").includes("v horizon"),true);
+  assert.equal(View.helpLine("list","cli",true,true,"done"),"d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs · r reload · R sync · Tab next panel");
+  const target=doc.streams[1];
+  const dump=View.dumpView({backend:"cli",...doc,catalogue:doc.streams,tab:target.key,moving:{id:"3",targetUid:target.uid}});
+  assert.deepEqual(dump.moving,{id:"3",target:target.key});
+  for(const tab of ["done","personal: goals"]) {
+    const empty=View.dumpView({backend:"cli",hasStreams:true,catalogue:doc.streams,items:[],tab});
+    assert.deepEqual(empty.rows,[]);
+  }
+  const filtered=View.dumpView({backend:"cli",...doc,tab:target.key,horizonFilter:"long"});
+  assert.deepEqual(filtered.rows,[]);
+  const json=View.dumpView({backend:"json",...doc,tab:"done",moving:{id:"3",targetUid:target.uid},horizonFilter:"mid"});
+  assert.equal(json.tab,"overview"); assert.equal(json.horizonFilter,"all"); assert.equal(json.moving,null);
+  assert.deepEqual(json.streams,[]); assert.deepEqual(Object.keys(json.open[0]),["id","title","status"]);
+});
+
+
+test("global focus caption on Overview and Done, hidden on its home and in today's modes",()=>{
+  const doc=boardFixture("provisional/board-streams.json");
+  const line=View.focusLine(doc.items,doc.focus,idle);
+  assert.equal(View.focusCaption(line,doc.streams,"overview",true),"tellkin");
+  assert.equal(View.focusCaption(line,doc.streams,"done",true),"tellkin");
+  assert.equal(View.focusCaption(line,doc.streams,"work: tellkin",true),"");
+  assert.equal(View.focusCaption(line,doc.streams,"overview",false),"");
+  assert.equal(View.focusCaption(line,doc.streams.slice(0,1),"overview",true),"");
+  assert.equal(View.focusCaption(null,doc.streams,"overview",true),"");
+  assert.equal(View.focusCaption({item:null},doc.streams,"overview",true),"");
 });

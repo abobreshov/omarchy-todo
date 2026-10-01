@@ -119,6 +119,11 @@ Item {
         spacing: Style.spacing.sm
 
         Caption {
+          visible: line.panel.focusCaption !== undefined && line.panel.focusCaption !== ""
+          anchors.verticalCenter: parent.verticalCenter
+          text: "· " + (line.panel.focusCaption || "")
+        }
+        Caption {
           visible: line.timerShown
           anchors.verticalCenter: parent.verticalCenter
           text: line.shown ? line.model.timerGlyph + " " + line.model.timer : ""

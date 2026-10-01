@@ -130,6 +130,8 @@ BarWidget {
       return root.panel.syncNow()
     }
 
+    function tab(name: string): string { return root.panel ? root.panel.tab(name) : "unavailable" }
+
     function dump(): string {
       if (!root.panel) return "unavailable"
       return root.panel.dump()

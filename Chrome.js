@@ -28,6 +28,7 @@ function pillState(input) {
   if (doing) {
     var more = items.filter(function(it) { return it && it.status === "doing" }).length - 1
     var tip = "Doing: " + Model.tooltip(doing.name) + (more > 0 ? " (+" + more + " more)" : "")
+    if (cli && input.hasStreams === true && doing.stream !== null && doing.stream !== undefined && doing.stream !== "inbox") tip += "\nStream: " + doing.stream
     if (focus.text && focus.text !== doing.name) tip += "\nFocus: " + Model.tooltip(focus.text)
     tip += "\n" + Model.todosWord(open)
     out = { glyph: Model.G.doing, label: Model.pillLabel(doing.name, max), tooltip: tip, urgent: false, dimmed: false }

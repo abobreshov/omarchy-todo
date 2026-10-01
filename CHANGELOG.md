@@ -12,6 +12,17 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
 
 ### Changed
 
+- Stream views: pinned Overview/Inbox tabs, user streams and a final Done tab;
+  grouped Overview, horizon sections/filter, uid-based move mode, and cursor
+  anchoring through reads and optimistic writes.
+- Priority marks and size chips share fixed slots across rows. Pixel side-scroll
+  and Shift+wheel switch one tab per gesture without changing hover geometry.
+- CLI boards with streams keep today's done tasks in each block's tail. The
+  Done tab groups the last seven local calendar days and holds reopened rows
+  until close. `completedAt` survives optimistic writes and rollback.
+- `dump` exposes the displayed tab, active stream summaries, strip window,
+  filter, move target and four row shapes. `tab(name)` selects a tab for scripts.
+
 - Plugin id `abobreshov.todo`; IPC target and state directory
   (`~/.local/state/abobreshov.todo/todos.json`) follow it. On the first
   json-mode start without a file of its own the plugin reads the upstream

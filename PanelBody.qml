@@ -19,7 +19,7 @@ KeyboardPanel {
   centerOnBar: true
   focusTarget: keyCatcher
   contentWidth: root.fittedContentWidth(Style.space(340))
-  contentHeight: root.fittedContentHeight(bodyColumn.implicitHeight, Style.space(520))
+  contentHeight: root.fittedContentHeight(root.host.ui.view === "list" ? pinnedList.desiredHeight + pinnedFooter.height + Style.spacing.lg : bodyColumn.implicitHeight, Style.space(520))
 
   PanelKeyCatcher {
     id: keyCatcher
@@ -36,8 +36,25 @@ KeyboardPanel {
     onDeleteRequested: root.host.dispatch({ type: "delete" })
     onTextKey: function(t) { root.host.dispatch({ type: "key", key: t }) }
 
+    TaskList {
+      id: pinnedList
+      visible: root.host.ui.view === "list"
+      width: parent.width
+      panel: root.host
+      maxHeight: keyCatcher.height - pinnedFooter.height - Style.spacing.lg
+    }
+    StatusFooter {
+      id: pinnedFooter
+      visible: root.host.ui.view === "list" && (root.host.footerModel !== null || root.host.message !== "" || root.host.ui.moving !== null)
+      width: parent.width
+      height: visible ? implicitHeight : 0
+      anchors.bottom: parent.bottom
+      panel: root.host
+      implicitHeight: Style.space(24)
+    }
     Flickable {
       id: scroll
+      visible: root.host.ui.view !== "list"
       anchors.fill: parent
       contentWidth: width
       contentHeight: bodyColumn.implicitHeight
@@ -52,7 +69,7 @@ KeyboardPanel {
 
         // The list and the cli error body share one header (UX §4.2, §7).
         TaskList {
-          visible: root.host.ui.view === "list" || root.host.ui.view === "error"
+          visible: root.host.ui.view === "error"
           width: parent.width
           panel: root.host
         }

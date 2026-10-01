@@ -1,6 +1,9 @@
 .pragma library
 .import "Model.js" as Model
 .import "View.js" as View
+.import "Tabs.js" as Tabs
+.import "Cursor.js" as Cursor
+.import "Streams.js" as Streams
 
 // Key resolution and the panel's view-state reducer (UX §4.5, §7; PLAN
 // §6.8, A20). Pure: `keyAction` turns a key into a store action (or a
@@ -24,6 +27,7 @@ function isDeleteKey(key) { return DELETE_KEYS[key] === true }
 function initialUi() {
   return {
     view: "list",          // list | compose | detail | error
+    cursorKey: "", horizonFilter: "all", moving: null,
     cursor: 0,             // index into ctx.rows (the focus line is row 0 when shown)
     stepCursor: 0,         // detail view: index into the plan steps
     selectedId: "",        // detail view: the task shown
@@ -63,6 +67,7 @@ function keyAction(view, key, ctx) {
   if (key === "r") return { type: "refresh" }
   if (key === "R") return { type: "syncNow" }
   if (view === "error") return null
+  if (view === "list" && c.currentTab === "done" && ["n", "N", "+", "m", "v", "!", "z", "s", "f", "p"].indexOf(key) !== -1) return null
   // Which row, and whether this press arms or confirms, is the reducer's.
   if (isDeleteKey(key)) return { type: "delete" }
   if (key === "?") return { type: "toggleHelp" }
@@ -106,7 +111,7 @@ function rowAt(ui, ctx) {
 function keyContext(ui, ctx) {
   var c = {
     backend: ctx.backend, focus: ctx.focus, sessionDone: ctx.sessionDone, pomodoro: ctx.pomodoro,
-    item: null, onFocusLine: false
+    item: null, onFocusLine: false, currentTab: ctx.currentTab
   }
   if (ui.view === "detail") {
     c.item = findInRows(ctx, ui.selectedId)
@@ -120,6 +125,8 @@ function keyContext(ui, ctx) {
 }
 
 function findInRows(ctx, id) {
+  var found = Model.findItem(ctx.items, id)
+  if (found) return found
   var rows = ctx.rows || []
   for (var i = 0; i < rows.length; i++)
     if (rows[i] && rows[i].item && rows[i].item.id === id) return rows[i].item
@@ -166,6 +173,7 @@ function openCompose(ui, prefill, actions) {
 function activateRow(ui, ctx, actions) {
   var row = rowAt(ui, ctx)
   if (!row || row.selectable === false) return
+  if (ctx.currentTab === "done" && row.kind === "focus" && !row.item) return
   if (row.kind === "focus" && !row.item) openCompose(ui, ctx.prefill || "", actions)
   else if (row.item) openDetail(ui, row.item.id)
 }
@@ -215,22 +223,42 @@ function reduceUi(ui, event, ctx) {
   var c = ctx || {}
   var ev = event || {}
   var now = ev.now || 0
+  if (ev.type === "rows") next = Cursor.reanchor(next, c.rows || [], c.idMap)
+  if (next.view !== "compose" && !(ev.type === "esc" && next.armedId !== "")) {
+    var tc = copyUi(c)
+    tc.item = keyContext(next, c).item
+    var nav = Tabs.reduce(next, ev, tc)
+    if (nav) { next = nav.ui; actions = nav.actions }
+    if (nav && ev.type !== "rows") return { ui: next, actions: actions }
+  }
   switch (ev.type) {
+    case "resetCursor":
+      next.moving = null
+      next.cursor = Cursor.firstSelectable(c.rows || [], c.currentTab === "done")
+      next.cursorKey = Cursor.anchorOf(next, c.rows || [])
+      break
     case "open":
     case "close":
       backToList(next)
-      next.cursor = 0
+      next.cursor = Cursor.firstSelectable(c.rows || [], c.currentTab === "done")
+      next.cursorKey = Cursor.anchorOf(next, c.rows || [])
+      next.moving = null
+      if (ev.type === "close") next.horizonFilter = "all"
       next.help = false
       leaveCompose(next)
       break
     case "storeError":
       // E4/E7/E8 replace the list body; E5 (busy) is a banner above it.
       if (ev.error && ev.error.kind !== "busy") {
+        next.moving = null
         next.view = "error"
         disarm(next)
       } else if (next.view === "error") next.view = "list"
       break
     case "selectTask":
+      next.moving = null
+      var selectedIndex = rowIndexOf(c, ev.id)
+      if (selectedIndex >= 0) next.cursor = selectedIndex
       openDetail(next, String(ev.id))
       break
     case "text":
@@ -247,6 +275,8 @@ function reduceUi(ui, event, ctx) {
       if (next.view === "compose") leaveCompose(next)
       else if (next.view === "detail") backToList(next)
       else if (next.armedId !== "") disarm(next)
+      else if (next.moving) next.moving = null
+      else if (next.horizonFilter !== "all" && c.currentTab !== "done") next.horizonFilter = "all"
       else actions.push({ type: "close" })
       break
     case "enter":
@@ -257,12 +287,17 @@ function reduceUi(ui, event, ctx) {
           if (Model.squish(next.name) !== "") next.composeField = "description"
         } else {
           if (Model.squish(next.name) !== "") {
-            actions.push({ type: "add", name: Model.squish(next.name), description: Model.squish(next.description) })
+            var add = { type: "add", name: Model.squish(next.name), description: Model.squish(next.description) }
+            if (c.backend === "cli" && c.hasStreams) {
+              var target = Streams.composeTarget(c.tabKey || "overview", next.horizonFilter)
+              for (var field in target) add[field] = target[field]
+            }
+            actions.push(add)
             leaveCompose(next)
           } else next.composeField = "name"
         }
       } else if (next.view === "detail") {
-        if (c.steps > 0) actions.push({ type: "toggleStep", id: next.selectedId, n: clampCursor(next.stepCursor, c.steps) + 1 })
+        if (!c.busy && c.steps > 0) actions.push({ type: "toggleStep", id: next.selectedId, n: clampCursor(next.stepCursor, c.steps) + 1 })
       } else if (next.view === "list") {
         disarm(next)
         activateRow(next, c, actions)
@@ -272,20 +307,20 @@ function reduceUi(ui, event, ctx) {
       disarm(next)
       if (next.view === "list") {
         if (ev.dx > 0) activateRow(next, c, actions)
-        else if (ev.dy) next.cursor = clampCursor(next.cursor + ev.dy, (c.rows || []).length)
+        else if (ev.dy) next.cursor = Math.max(0, Cursor.nextSelectable(c.rows || [], next.cursor, ev.dy > 0 ? 1 : -1))
       } else if (next.view === "detail") {
         if (ev.dx < 0) backToList(next)
         else if (ev.dy) next.stepCursor = clampCursor(next.stepCursor + ev.dy, c.steps || 0)
       }
       break
     case "hover":
-      if (next.view === "list" && ev.index >= 0 && ev.index < (c.rows || []).length) {
+      if (next.view === "list" && Cursor.selectable((c.rows || [])[ev.index])) {
         if (next.cursor !== ev.index) disarm(next)
         next.cursor = ev.index
       }
       break
     case "delete":
-      if (next.view === "list" || next.view === "detail") handleDelete(next, c, ev, actions)
+      if (!c.busy && (next.view === "list" || next.view === "detail")) handleDelete(next, c, ev, actions)
       break
     case "tick":
       if (next.armedId !== "" && now - next.armedAt > ARM_MS) disarm(next)
@@ -294,9 +329,10 @@ function reduceUi(ui, event, ctx) {
       if (next.view === "compose") break
       var action = keyAction(next.view, ev.key, keyContext(next, c))
       // Delete / BackSpace keep the armed row: the second press confirms.
-      if (action && action.type === "delete") { handleDelete(next, c, ev, actions); break }
+      if (action && action.type === "delete") { if (!c.busy) handleDelete(next, c, ev, actions); break }
       disarm(next)
       if (!action) break
+      if (c.busy && ["refresh", "syncNow", "toggleHelp"].indexOf(action.type) === -1) break
       if (action.type === "toggleHelp") next.help = !next.help
       else if (action.type === "compose") openCompose(next, "", actions)
       else actions.push(action)
@@ -305,5 +341,6 @@ function reduceUi(ui, event, ctx) {
     default:
       break
   }
+  if (["rows", "text", "tick"].indexOf(ev.type) === -1) next.cursorKey = Cursor.anchorOf(next, c.rows || [])
   return { ui: next, actions: actions }
 }

@@ -108,3 +108,11 @@ test("footer reasons follow the UX §4.7 kind table", () => {
 });
 
 // ------------------------------------------------------------- copy
+
+
+test("pill tooltip's second line names a user stream, Inbox has none (AC-28.5)", () => {
+  const input = { backend: "cli", hasStreams: true, loaded: true, items: [item("3", "Task", "doing", { stream: "work: tellkin" })], focus: { text: "", taskId: null }, maxChars: 20, now: NOW };
+  assert.equal(Chrome.pillState(input).tooltip.split("\n")[1], "Stream: work: tellkin");
+  input.items[0].stream = "inbox";
+  assert.equal(Chrome.pillState(input).tooltip.includes("Stream:"), false);
+});

@@ -196,12 +196,12 @@ rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 
 ## Development
 
-All logic lives in ten `.pragma library` files, one concern each; the QML
+All logic lives in fourteen `.pragma library` files, one concern each; the QML
 files bind and forward.
 
 | Library | Holds |
 | --- | --- |
-| `Model.js` | The fourteen-field item model (including stream, labels, horizon, priority and size), the catalogue normaliser, glyphs, settings, text/time formatting and the focus link. |
+| `Model.js` | The fifteen-field item model (including stream, labels, horizon, priority size and completedAt), the catalogue normaliser, glyphs, settings, text/time formatting and the focus link. |
 | `Priority.js` | Strict document priority/size normalisers and the contract's level, size and horizon constants. |
 | `Store.js` | The json document (version 2, reads version 1), `board --json` metadata/catalogue mapping and capability detection, sync block and `reduce(doc, action)`, including move, priority and size writes. |
 | `Queue.js` | The cli store's ordering rules, rollback rebase and optimistic id map and write-reply codec. |
@@ -210,6 +210,10 @@ files bind and forward.
 | `Chrome.js` | The pill and the sync footer. |
 | `Pomodoro.js` | The hand-off: `pomodoroIntent`, `pomodoroMessage`, `classifyShell`, `pomodoroView`. |
 | `Keys.js` | `keyAction` (the key map) and `reduceUi` (the view machine: list, compose, detail, error, cursor, armed delete). |
+| `Order.js` | Priority/status/horizon/id comparators, tick-time peer snapshots, completion order and local calendar-day windows (`DONE_DAYS = 7`). |
+| `Tabs.js` | Active tabs, labels and resolution, clamped navigation and move targets by uid, whole-tab windows, angle/pixel wheel accumulators. |
+| `Streams.js` | Grouped Overview, stream blocks and sections, done tails, Done-tab day rows, filter/count/empty copy and document-wide slots. |
+| `Cursor.js` | Selectable rows, identity anchoring and temporary-id translation, session-map pruning, minimal scroll adjustment. |
 | `Argv.js` | The argv builders for `todocli`, `omarchy-shell` and `install`. |
 
 Libraries import each other with `.import "X.js" as X` (Model ← Store ←

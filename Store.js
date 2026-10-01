@@ -127,7 +127,7 @@ function fromCli(raw) {
     if (!t || typeof t !== "object") continue
     var item = Model.normalize({
       id: t.id, uid: t.uid, name: t.title, description: t.description, status: t.status,
-      plan: t.plan, notes: t.notes, due: t.due, author: t.author,
+      plan: t.plan, notes: t.notes, due: t.due, author: t.author, completedAt: t.completedAt,
       stream: t.stream, labels: t.labels, horizon: t.horizon, priority: t.priority, size: t.size
     })
     if (item) items.push(item)
@@ -241,16 +241,21 @@ function setSize(doc, id, value) {
   return accepted({ items: items, focus: d.focus }, "ok", { type: "setSize", id: String(id), value: value })
 }
 
-function setStatus(doc, id, status) {
+function setStatus(doc, id, status, now) {
   var d = docOf(doc)
   var s = Model.normalizeStatus(status)
   if (s !== String(status)) return refused(d, "bad status")
   if (!Model.findItem(d.items, id)) return refused(d, "unknown id")
-  var items = replaceItem(d.items, id, function(it) { it.status = s })
+  var items = replaceItem(d.items, id, function(it) {
+    it.completedAt = s === "done" ? (it.status === "done" ? it.completedAt : new Date(now === undefined ? 0 : now).toISOString()) : null
+    it.status = s
+  })
   // A focused task is always doing: leaving doing clears the link, the
   // free text stays (PRODUCT UC-5 A2b).
   var focus = s === "doing" ? d.focus : clearFocusIf(d.focus, id)
-  return accepted({ items: items, focus: focus }, "ok", { type: "setStatus", id: String(id), status: s })
+  var action = { type: "setStatus", id: String(id), status: s }
+  if (now !== undefined) action.at = now
+  return accepted({ items: items, focus: focus }, "ok", action)
 }
 
 function setFocus(doc, idOrClear) {
@@ -281,14 +286,14 @@ function removeItem(doc, id) {
   return accepted({ items: items, focus: clearFocusIf(d.focus, id) }, "ok", { type: "remove", id: String(id) })
 }
 
-function reduce(doc, action) {
+function reduce(doc, action, now) {
   var a = action || {}
   switch (a.type) {
     case "add": return addItem(doc, a.name, a.description, a.id, a.stream, a.horizon)
     case "move": return move(doc, a.id, a.stream)
     case "setPriority": return setPriority(doc, a.id, a.value)
     case "setSize": return setSize(doc, a.id, a.value)
-    case "setStatus": return setStatus(doc, a.id, a.status)
+    case "setStatus": return setStatus(doc, a.id, a.status, a.at === undefined ? now : a.at)
     case "focus": return setFocus(doc, a.id)
     case "toggleStep": return toggleStep(doc, a.id, a.n)
     case "remove": return removeItem(doc, a.id)

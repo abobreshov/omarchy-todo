@@ -5,6 +5,7 @@ import path from "node:path";
 import { lib, here } from "./helpers.mjs";
 
 const Store = lib("Store.js");
+const Queue = lib("Queue.js");
 const Model = lib("Model.js");
 const Argv = lib("Argv.js");
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(here, "fixtures", name), "utf8"));
@@ -179,4 +180,23 @@ test("UI-30 d: every existing copy reducer keeps all metadata before the next re
     assert.deepEqual(metadata(get(r.doc, "3")), { stream: "work: tellkin", labels: ["q4"], horizon: "short", priority: 0, size: "M" });
     assert.notEqual(get(r.doc, "3").labels, get(doc, "3").labels);
   }
+});
+
+
+test("AC-ST.61: completedAt maps, stamps, clears, survives queue rebase and rollback", () => {
+  const now = Date.parse("2026-09-30T10:00:00.000Z");
+  const doc = Store.fromCli(fixture("provisional/board-streams.json"));
+  assert.equal(get(doc, "8").completedAt, "2026-09-29T08:45:00.000Z");
+  const before = { items: doc.items, focus: doc.focus };
+  const done = Store.reduce(before, { type: "setStatus", id: "3", status: "done" }, now);
+  assert.equal(get(done.doc, "3").completedAt, new Date(now).toISOString());
+  assert.equal(get(before, "3").completedAt, null);
+  const same = Store.reduce(done.doc, { type: "setStatus", id: "3", status: "done" }, now + 1000);
+  assert.equal(get(same.doc, "3").completedAt, get(done.doc, "3").completedAt);
+  for (const status of ["todo", "doing"]) assert.equal(get(Store.reduce(done.doc, { type: "setStatus", id: "3", status }, now).doc, "3").completedAt, null);
+  const rebased = Queue.rebase(before, [{ action: done.action, before }]);
+  assert.equal(get(rebased.doc, "3").completedAt, get(done.doc, "3").completedAt);
+  assert.equal(get(Queue.rebase(before, []).doc, "3").completedAt, null);
+  const copied = Model.copyItem(get(done.doc, "3"));
+  assert.equal(copied.completedAt, new Date(now).toISOString());
 });

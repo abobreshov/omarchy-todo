@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import "Streams.js" as Streams
 import QtQuick
 import qs.Commons
 import qs.Ui
@@ -76,7 +77,9 @@ Column {
       anchors.left: backFromCompose.right
       anchors.leftMargin: Style.spacing.md
       anchors.verticalCenter: parent.verticalCenter
-      text: "New todo"
+      text: view.panel.metadata ? Streams.composeCaption(view.panel.tabKey, view.panel.ui.horizonFilter, view.panel.tabStripAvailable) : "New todo"
+      anchors.right: parent.right
+      elide: Text.ElideRight
       color: view.fg
       font.family: view.family
       font.pixelSize: Style.font.title

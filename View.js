@@ -1,5 +1,7 @@
 .pragma library
 .import "Model.js" as Model
+.import "Streams.js" as Streams
+.import "Tabs.js" as Tabs
 
 // The view decisions and the copy (UX §3.1, §4.2, §4.4, §4.5, §4.7, §10.3):
 // the list's order and the session's done rows, the focus line, the detail
@@ -102,7 +104,7 @@ function listRows(focusLine, listItems) {
   var out = []
   if (focusLine) out.push({ kind: "focus", item: focusLine.item, selectable: focusLine.selectable })
   var list = listItems || []
-  for (var i = 0; i < list.length; i++) out.push({ kind: "item", item: list[i], selectable: true })
+  for (var i = 0; i < list.length; i++) out.push(list[i].kind ? list[i] : { kind: "item", item: list[i], selectable: true })
   return out
 }
 
@@ -123,9 +125,11 @@ function emptyCopy(items) {
   return null
 }
 
-function helpLine(view, backend) {
+function helpLine(view, backend, hasStreams, stripShown, tab) {
   if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro · x x or Del delete · Esc back"
-  return "n new · d done · s doing · f focus · p pomodoro · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
+  if (tab === "done") return "d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs · r reload · R sync · Tab next panel"
+  var extra = backend === "cli" && hasStreams ? (stripShown ? " · m move · [ ] 0-9 tabs" : "") + " · v horizon" : ""
+  return "n new · d done · s doing · f focus · p pomodoro" + extra + " · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
 }
 
 // ---------------------------------------------------------------- row cluster
@@ -246,16 +250,17 @@ function actionTooltips(item, ctx) {
 function dumpView(state) {
   var s = state || {}
   var items = s.items || []
+  var metadata = s.backend === "cli" && s.hasStreams === true
   var sessionDone = s.sessionDone || {}
   var sorted = sortForList(items, sessionDone)
-  var homes = Model.indexStreams(s.streams)
+  var homes = Model.indexStreams(s.catalogue || s.streams)
   var open = []
   var done = []
   for (var i = 0; i < sorted.length; i++) {
     var it = sorted[i]
     if (it.status !== "done") {
       var entry = { id: it.id, title: it.name, status: it.status }
-      if (s.hasStreams === true) {
+      if (metadata) {
         entry.stream = it.stream
         entry.horizon = it.horizon
         entry.labels = it.labels.slice()
@@ -268,7 +273,22 @@ function dumpView(state) {
     else if (sessionDone[it.id]) done.push({ id: it.id, title: it.name })
   }
   var focus = s.focus || { text: "", taskId: null }
+  var catalogue = s.catalogue || s.streams || []
+  var tab = metadata ? s.tab || "overview" : "overview"
+  var opts = { sessionDone: sessionDone, latches: s.latches, horizonFilter: s.horizonFilter || "all", dayStart: s.dayStart, streams: catalogue, reopened: s.reopened }
+  var rows = s.displayRows || (metadata ? (tab === "done" ? Streams.doneRows(items, catalogue, opts) : tab === "overview" && Tabs.active(catalogue).length > 1 ? Streams.overviewRows(items, catalogue, opts) : Streams.tabRows(items, tab === "overview" ? "inbox" : tab, opts)) : visibleItems(sorted, sessionDone).map(function(it) { return { kind: "item", item: it, badge: "" } }))
   return {
+    tab: tab,
+    streams: metadata ? Tabs.active(catalogue).map(function(st) { return { uid: st.uid, key: st.key, open: st.open } }) : [],
+    strip: metadata && s.strip ? { first: s.strip.first, last: s.strip.last, hiddenLeft: s.strip.hiddenLeft, hiddenRight: s.strip.hiddenRight } : null,
+    horizonFilter: metadata ? opts.horizonFilter : "all",
+    moving: metadata && s.moving && Tabs.targetOf({ moving: s.moving }, { catalogue: catalogue }) ? { id: s.moving.id, target: Tabs.targetOf({ moving: s.moving }, { catalogue: catalogue }).key } : null,
+    rows: rows.map(function(r) {
+      if (r.kind === "header") return { kind: r.kind, stream: r.stream, open: r.open }
+      if (r.kind === "section") return { kind: r.kind, horizon: r.horizon, count: r.count }
+      if (r.kind === "day") return { kind: r.kind, date: r.date, count: r.count }
+      return { kind: "item", id: r.item.id, status: r.item.status, stream: metadata ? r.item.stream : null, horizon: metadata ? r.item.horizon : null, badge: metadata ? r.badge : "", priority: metadata ? r.item.priority : null, size: metadata ? r.item.size : null }
+    }),
     version: 1,
     backend: s.backend || Model.DEFAULTS.backend,
     cliPath: s.cliPath || Model.DEFAULTS.cliPath,
@@ -283,4 +303,9 @@ function dumpView(state) {
     footer: s.footer ? { text: s.footer.text, urgent: s.footer.urgent === true } : null,
     message: s.message || null
   }
+}
+
+function focusCaption(line, catalogue, tab, metadata) {
+  if (!metadata || !line || !line.item || Tabs.active(catalogue).length < 2 || line.item.stream === tab) return ""
+  return Streams.itemRow(line.item, "", catalogue, true).streamCaption
 }

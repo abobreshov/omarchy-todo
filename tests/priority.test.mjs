@@ -21,3 +21,14 @@ test("vocabulary equals CONTRACT-S9 §1", () => {
   assert.deepEqual(Priority.SIZES, ["XS", "S", "M", "L", "XL"]);
   assert.deepEqual(Priority.HORIZONS, ["short", "mid", "yearly", "long"]);
 });
+
+
+test("Q-S24 bands, glyphs, zero and unset share one derivation", () => {
+  for (const [v, level] of [[0,"low"],[37,"low"],[38,"medium"],[62,"medium"],[63,"high"],[87,"high"],[88,"critical"],[100,"critical"]]) {
+    assert.equal(Priority.levelOf(v), level);
+    assert.notEqual(Priority.markOf(v), "");
+  }
+  for (const v of [null,undefined,"0",101]) {
+    assert.equal(Priority.levelOf(v), ""); assert.equal(Priority.markOf(v), "");
+  }
+});

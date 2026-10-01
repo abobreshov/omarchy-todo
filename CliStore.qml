@@ -104,6 +104,7 @@ TodoStore {
   //      failure rebases the rest of the queue onto.
   function perform(action, done) {
     if (error) return Errors.unavailable(error)
+    if (action.type === "setStatus" && action.at === undefined) action.at = Date.now()
     var r = Store.reduce({ items: items, focus: focus }, action)
     if (!r.ok) return r.reply
     if (r.action === null) {

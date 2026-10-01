@@ -68,12 +68,12 @@ test("homeOf and isOrphan share active-home semantics for arrays and indexed cat
 
 test("UX §18: root JS and QML have no metadata truthiness; each grep rule detects planted bad lines", () => {
   const rules = [
-    [/\.(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["it.priority || null", "it.size && x", "it.priority ? a : b"]],
-    [/!\s*!?\s*[\w$.]*\.(priority|size|stream|labels|horizon)\b/, ["!it.size", "!!it.priority"]],
-    [/if\s*\(\s*[\w$.]*\.(priority|size|stream|labels|horizon)\s*\)/, ["if (it.priority)"]],
-    [/\b(priority|size|stream|labels|horizon)\s*(\|\||&&|\?[^.:?])/, ["priority || null", "size && x", "horizon ? a : b"]],
-    [/!\s*(priority|size|stream|labels|horizon)\b/, ["if (!priority)", "!size", "!!horizon"]],
-    [/if\s*\(\s*!?\s*(priority|size|stream|labels|horizon)\s*\)/, ["if (size)", "if (!priority)", "if (horizon)"]],
+    [/\.(priority|size|stream|labels|horizon|completedAt)\s*(\|\||&&|\?[^.:?])/, ["it.priority || null", "it.size && x", "it.priority ? a : b"]],
+    [/!\s*!?\s*[\w$.]*\.(priority|size|stream|labels|horizon|completedAt)\b/, ["!it.size", "!!it.priority"]],
+    [/if\s*\(\s*[\w$.]*\.(priority|size|stream|labels|horizon|completedAt)\s*\)/, ["if (it.priority)", "if (it.completedAt)"]],
+    [/\b(priority|size|stream|labels|horizon|completedAt)\s*(\|\||&&|\?[^.:?])/, ["priority || null", "size && x", "horizon ? a : b"]],
+    [/!\s*(priority|size|stream|labels|horizon|completedAt)\b/, ["if (!priority)", "!size", "!!horizon"]],
+    [/if\s*\(\s*!?\s*(priority|size|stream|labels|horizon|completedAt)\s*\)/, ["if (size)", "if (!priority)", "if (horizon)"]],
   ];
   for (const [regex, planted] of rules) {
     for (const bad of planted) assert.equal(regex.test(bad), true, bad);
@@ -117,7 +117,7 @@ test("normalize keeps status, plan and notes and drops junk (A17)", () => {
   assert.equal(Model.normalize(null), null);
   assert.equal(Model.normalize("x"), null);
   assert.equal(Model.normalize({ name: "   " }), null);
-  const n = Model.normalize({ id: " 7 ", name: " Buy  milk ", description: " x  y ", status: "DOING", plan: [{ text: "a", done: 1 }, { text: "" }, "junk"], notes: [{ at: "t", text: "n" }, { text: "" }], due: "2026-10-01", author: "Ann", uid: "u1" });
+  const n = Model.normalize({ id: " 7 ", name: " Buy  milk ", description: " x  y ", status: "DOING", plan: [{ text: "a", done: 1 }, { text: "" }, "junk"], notes: [{ at: "t", text: "n" }, { text: "" }], due: "2026-10-01", author: "Ann", completedAt: null, uid: "u1" });
   assert.deepEqual(n, item("7", "Buy milk", "doing", { uid: "u1", description: "x y", plan: [{ text: "a", done: true }], notes: [{ at: "t", text: "n" }], due: "2026-10-01", author: "Ann" }));
   assert.equal(Model.normalize({ name: "x", status: "weird" }).status, "todo");
   assert.match(Model.normalize({ name: "x" }).id, /^t/);
@@ -248,4 +248,12 @@ test("coerce follows A18, from the one DEFAULTS table", () => {
   assert.equal(Model.coerce({ maxChars: "abc" }).maxChars, 24);
   assert.equal(Model.coerce({ maxChars: -5 }).maxChars, 0);
   assert.equal(Model.coerce({ maxChars: 0 }).maxChars, 0);
+});
+
+test("completedAt is carried through normalization and copies (AC-ST.61)", () => {
+  for (const value of [null, "2026-09-30T09:00:00.000Z"]) {
+    const it = Model.normalize({ name: "done", completedAt: value });
+    assert.equal(it.completedAt, value);
+    assert.equal(Model.copyItem(it).completedAt, value);
+  }
 });

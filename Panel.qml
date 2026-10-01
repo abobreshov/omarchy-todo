@@ -10,6 +10,10 @@ import "View.js" as View
 import "Chrome.js" as Chrome
 import "Pomodoro.js" as Pomodoro
 import "Keys.js" as KeyMap
+import "Streams.js" as Streams
+import "Tabs.js" as Tabs
+import "Order.js" as Order
+import "Cursor.js" as Cursor
 
 // The todo panel: the composition root. The BarWidget.qml entry point owns
 // the IPC target and lifecycle forwarding; this file picks the store
@@ -47,6 +51,7 @@ Panel {
   readonly property string pomodoroTarget: cfg.pomodoroTarget
   readonly property int maxChars: cfg.maxChars
   // The one place the backend is looked at: everything else binds to `store`.
+  readonly property var storeIdMap: backend === "cli" ? cliStore.idMap : ({})
   readonly property TodoStore store: backend === "cli" ? cliStore : jsonStore
 
   // ---- state
@@ -54,6 +59,16 @@ Panel {
   // Rows ticked done during this panel session: id -> pre-tick status. Only
   // the pruned map is read, so a reverted write or an external reopen drops
   // the row from it at once (UX §4.5 done-row rule; PLAN A34b).
+  property string currentTab: "overview"
+  property var clock: function() { return Date.now() }
+  property double viewDayStart: 0
+  property int tickSequence: 0
+  property var latches: ({})
+  property var sessionReopened: ({})
+  property var previousCatalogue: []
+  property var wheelState: ({})
+  property var strip: null
+  signal cursorScroll(bool reset)
   property var sessionDone: ({})
   readonly property var liveSessionDone: View.pruneSessionDone(sessionDone, items)
   property string message: ""
@@ -63,15 +78,27 @@ Panel {
   readonly property var focusModel: store.focus
   readonly property var pomodoro: pomo.view
   readonly property int openCount: View.openCount(items)
-  readonly property string countLabel: View.countLabel(items)
-  readonly property var listItems: View.sortForList(View.visibleItems(items, liveSessionDone), liveSessionDone)
+  readonly property bool metadata: backend === "cli" && store.hasStreams
+  readonly property var catalogue: store.streams
+  readonly property var tabs: Tabs.tabsOf(catalogue)
+  readonly property bool tabStripAvailable: metadata && store.loaded && Tabs.active(catalogue).length > 1
+  readonly property bool stripShown: tabStripAvailable && ui.view === "list"
+  readonly property string tabKey: currentTab === "overview" || currentTab === "done" ? currentTab : (tabs.filter(function(t) { return t.uid === root.currentTab })[0] || { key: "overview" }).key
+  readonly property var displayRows: metadata ? (currentTab === "done" ? Streams.doneRows(items, catalogue, viewOptions) : currentTab === "overview" && Tabs.active(catalogue).length > 1 ? Streams.overviewRows(items, catalogue, viewOptions) : Streams.tabRows(items, tabKey === "overview" ? "inbox" : tabKey, viewOptions)) : View.sortForList(View.visibleItems(items, liveSessionDone), liveSessionDone).map(function(it) { return { kind: "item", item: it, badge: "", streamCaption: "" } })
+  readonly property var viewOptions: ({ sessionDone: liveSessionDone, latches: latches, streams: catalogue, horizonFilter: ui.horizonFilter, dayStart: viewDayStart, reopened: sessionReopened })
+  readonly property bool prioritySlot: metadata && Streams.prioritySlot(items)
+  readonly property bool badgeSlot: metadata && Streams.badgeSlot(catalogue, items)
+  readonly property string countLabel: metadata ? Streams.countCaption(items, catalogue, tabKey, ui.horizonFilter, displayRows) : View.countLabel(items)
+  readonly property string movePrompt: Tabs.movePrompt(ui, reducerCtx())
+  readonly property var listItems: displayRows.filter(function(r) { return r.kind === "item" }).map(function(r) { return r.item })
   readonly property var focusLineModel: View.focusLine(items, focusModel, pomodoro)
+  readonly property string focusCaption: View.focusCaption(focusLineModel, catalogue, tabKey, metadata)
   readonly property int firstRow: focusLineModel ? 1 : 0
-  readonly property var rows: View.listRows(focusLineModel, listItems)
+  readonly property var rows: View.listRows(focusLineModel, displayRows)
   readonly property var detailItem: Model.findItem(items, ui.selectedId)
   readonly property var pill: Chrome.pillState({
     backend: backend, loaded: store.loaded, error: store.error, items: items, focus: focusModel,
-    sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
+    hasStreams: store.hasStreams, sync: store.sync, vertical: vertical, maxChars: maxChars, now: clockNow
   })
   readonly property var footerModel: store.hasSync ? Chrome.footer(store.sync, clockNow, { syncing: store.syncing }) : null
   readonly property var errorModel: Errors.errorView(store.error, { cliPath: cliPath, moduleName: moduleName })
@@ -81,7 +108,7 @@ Panel {
   // instead, and only once the first read has taken 300 ms.
   readonly property bool loading: !store.loaded && store.error === null
   property bool loadingShown: false
-  readonly property string emptyCopy: loading ? (loadingShown ? "Loading…" : "") : (store.loaded ? (View.emptyCopy(items) || "") : "")
+  readonly property string emptyCopy: loading ? (loadingShown ? "Loading…" : "") : (store.loaded ? (metadata ? Streams.emptyCopy(items, tabKey === "overview" && Tabs.active(catalogue).length === 1 ? "inbox" : tabKey, ui.horizonFilter, displayRows) : (View.emptyCopy(items) || "")) : "")
   onLoadingChanged: if (!loading) loadingShown = false
   readonly property var storeError: store.error
   // Change handlers below write `ui`; during construction the first
@@ -91,31 +118,58 @@ Panel {
   property bool ready: false
 
   onStoreErrorChanged: if (ready) dispatch({ type: "storeError", error: storeError })
+  readonly property string rowFingerprint: JSON.stringify(rows)
+  onRowFingerprintChanged: if (ready) Qt.callLater(root.reconcile)
+  onCatalogueChanged: if (ready) Qt.callLater(root.reconcile)
+  function reconcile() {
+    var oldTab = previousCatalogue.filter(function(s) { return s.uid === root.currentTab })[0]
+    var gone = currentTab !== "overview" && currentTab !== "done" && !tabs.some(function(t) { return t.uid === root.currentTab })
+    if (metadata && gone) {
+      currentTab = "overview"
+      showMessage((oldTab ? oldTab.key : "Stream") + " was archived · showing Overview")
+      dispatch({ type: "resetCursor" })
+      cursorScroll(true)
+    } else if ((!metadata || Tabs.active(catalogue).length < 2) && currentTab !== "overview") {
+      currentTab = "overview"
+      dispatch({ type: "resetCursor" })
+      cursorScroll(true)
+    }
+    var maps = Cursor.sessionMaps({ latches: latches, reopened: sessionReopened, sessionDone: sessionDone }, items, storeIdMap)
+    if (JSON.stringify(maps.latches) !== JSON.stringify(latches)) latches = maps.latches
+    if (JSON.stringify(maps.reopened) !== JSON.stringify(sessionReopened)) sessionReopened = maps.reopened
+    if (JSON.stringify(maps.sessionDone) !== JSON.stringify(sessionDone)) sessionDone = maps.sessionDone
+    dispatch({ type: "rows" })
+    previousCatalogue = catalogue
+  }
 
   // Deferred so every setting derived from the new `settings` object (the
   // cli path in particular) has settled before the other store loads.
   onStoreChanged: if (ready) Qt.callLater(root.applyBackend)
 
   function applyBackend() {
-    sessionDone = ({})
+    sessionDone = ({}); latches = ({}); sessionReopened = ({}); tickSequence = 0
     message = ""
     store.load()
   }
 
-  // Coming back to a shut panel always lands on the list, whatever tab was
-  // left showing; done rows are hidden again (A-D7).
+  // Reopening lands on the remembered tab and samples a new view day.
+  // Session latches end at close; degraded modes retain A-D7's visibility.
   onOpenedChanged: {
     if (!ready) return
     if (!opened) {
-      sessionDone = ({})
+      sessionDone = ({}); latches = ({}); sessionReopened = ({}); tickSequence = 0
+      wheelState = ({})
       dispatch({ type: "close" })
     } else {
+      clockNow = clock()
+      viewDayStart = Order.dayStartOf(clockNow)
       dispatch({ type: "open" })
-      clockNow = Date.now()
+      cursorScroll(true)
     }
   }
 
   Component.onCompleted: {
+    viewDayStart = Order.dayStartOf(clock())
     ready = true
     store.load()
   }
@@ -132,15 +186,18 @@ Panel {
   // ---- the reducer
   function reducerCtx() {
     return {
+      currentTab: currentTab, tabKey: tabKey, catalogue: catalogue, previousCatalogue: previousCatalogue, hasStreams: store.hasStreams, items: items, busy: errored, idMap: storeIdMap,
       rows: rows, steps: detailItem ? detailItem.plan.length : 0, backend: backend, focus: focusModel,
       sessionDone: liveSessionDone, pomodoro: pomodoro, prefill: focusModel && focusModel.text ? focusModel.text : ""
     }
   }
 
   function dispatch(event) {
-    event.now = Date.now()
+    event.now = clock()
     var r = KeyMap.reduceUi(ui, event, reducerCtx())
-    ui = r.ui
+    var oldCursor = ui.cursor, oldKey = ui.cursorKey
+    if (JSON.stringify(ui) !== JSON.stringify(r.ui)) ui = r.ui
+    if (event.type !== "hover" && (oldCursor !== ui.cursor || oldKey !== ui.cursorKey)) cursorScroll(false)
     for (var i = 0; i < r.actions.length; i++) apply(r.actions[i])
   }
 
@@ -152,8 +209,9 @@ Panel {
 
   function apply(action) {
     switch (action.type) {
-      case "add": case "setStatus": case "focus": case "toggleStep": case "remove":
+      case "add": case "setStatus": case "focus": case "toggleStep": case "remove": case "move":
         noteReply(perform(action)); break
+      case "selectTab": selectTab(action.uid); break
       case "startPomodoro": noteReply(startPomodoro(action.id)); break
       case "pausePomodoro": pomo.pause(); break
       case "refresh": refresh(); break
@@ -180,7 +238,7 @@ Panel {
   // first click arms and the second removes, as `x x` does.
   function rowKey(id, key) {
     var it = Model.findItem(items, id)
-    var action = KeyMap.keyAction("list", key, { item: it, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
+    var action = KeyMap.keyAction("list", key, { item: it, currentTab: currentTab, onFocusLine: false, focus: focusModel, backend: backend, sessionDone: liveSessionDone, pomodoro: pomodoro })
     if (!action) return
     if (action.type === "delete") dispatch({ type: "delete", id: String(id) })
     else apply(action)
@@ -192,13 +250,53 @@ Panel {
   // Every mutation goes through the store's perform; ticking a row done
   // remembers its pre-tick position first (UI-14).
   function perform(action) {
-    var tick = View.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
+    if (errored) return Errors.unavailable(store.error)
+    var it = Model.findItem(items, action.id)
+    var tick = currentTab === "done" ? null : View.tickDone({ items: items, sessionDone: sessionDone, pomodoro: pomodoro }, action)
+    if (tick && metadata) {
+      var home = Model.homeOf(catalogue, Model.isOrphan(catalogue, it) ? "inbox" : it.stream)
+      var peers = Streams.latchBlock(items, it, catalogue, latches, currentTab === "overview" && Tabs.active(catalogue).length > 1)
+      var held = Object.assign({}, latches)
+      held[it.id] = Order.latchOf(it, peers, home ? home.uid : undefined, tickSequence++)
+      latches = held
+    }
+    if (currentTab === "done" && it && it.status === "done" && action.type === "setStatus" && action.status === "todo") {
+      var reopened = Object.assign({}, sessionReopened)
+      if (!Object.prototype.hasOwnProperty.call(reopened, it.id)) reopened[it.id] = it.completedAt
+      sessionReopened = reopened
+    }
+    if (action.type === "setStatus") action.at = clock()
     var reply = store.perform(action, null)
     if (tick && reply === "ok") {
       sessionDone = tick.sessionDone
       if (tick.message !== "") showMessage(tick.message)
     }
+    if (action.type === "move" && reply === "ok") showMessage("#" + action.id + " moved to " + (action.stream === "inbox" ? "Inbox" : action.stream))
     return reply
+  }
+  function selectTab(uid) {
+    if (ui.view !== "list" || currentTab === uid) return
+    currentTab = uid
+    dispatch({ type: "resetCursor" })
+    cursorScroll(true)
+  }
+  function pickTarget(uid) { dispatch({ type: "chooseTab", uid: uid }) }
+  function wheelTab(ev) {
+    if (!stripShown || ui.view !== "list") return
+    var result = Tabs.wheel(wheelState, ev)
+    wheelState = result.state
+    if (result.step !== 0) dispatch({ type: "stepTab", direction: result.step })
+  }
+  function tab(name) {
+    var error = Tabs.unavailable(reducerCtx(), false)
+    if (error !== "") return error
+    if (Tabs.active(catalogue).length < 2 && Model.squish(name).toLowerCase() === "done") return Tabs.E21
+    var resolved = Tabs.resolve(tabs, name)
+    if (typeof resolved === "string") return resolved
+    var uid = Tabs.active(catalogue).length < 2 ? "overview" : resolved.uid
+    if (ui.view === "list") selectTab(uid)
+    else currentTab = uid
+    return "ok"
   }
 
   function openTask(id) {
@@ -246,7 +344,7 @@ Panel {
     return JSON.stringify(View.dumpView({
       backend: backend, cliPath: cliPath, view: ui.view, stale: store.stale, error: store.error, pill: pill,
       items: items, focus: focusModel, sessionDone: liveSessionDone, banner: banner === "" ? null : banner,
-      hasStreams: store.hasStreams, streams: store.streams,
+      hasStreams: store.hasStreams, catalogue: catalogue, tab: tabKey, strip: stripShown ? strip : null, horizonFilter: ui.horizonFilter, moving: ui.moving, displayRows: displayRows, latches: latches, reopened: sessionReopened, dayStart: viewDayStart,
       footer: ui.view === "error" ? null : footerModel, message: message === "" ? null : message
     }))
   }

@@ -38,6 +38,7 @@ stop() {
     qs ipc -p "$root" call smoke quit >/dev/null 2>&1 || kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
     pid=""
+    if [ -f "$scratch/qs.log" ]; then cat "$scratch/qs.log" >> "$scratch/qs-all.log"; fi
   fi
 }
 cleanup() { stop; rm -rf "$scratch"; }
@@ -180,10 +181,43 @@ sleep 0.6
 check "E14 the new file holds the item" "$(python3 -c 'import json,sys; print([t["name"] for t in json.load(open(sys.argv[1]))["todos"]])' "$own")" "['Found']"
 stop
 
+# ---- P2 views: fixture clocks never constrain the moving Done window --------
+export FAKE_BOARD="$here/tests/fixtures/provisional/board-streams.json"
+start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
+sleep 0.8
+check "P2 Overview tab" "$(dump | field 'd["tab"]')" "overview"
+check "P2 active catalogue" "$(dump | field '[s["key"] for s in d["streams"]]')" "['inbox', 'work: tellkin', 'personal: goals']"
+# CONTRACT rev4: Done extends the window's index space to streams.length.
+check "P2 strip includes Done" "$(dump | field 'd["strip"]')" "{'first': 1, 'last': 3, 'hiddenLeft': 0, 'hiddenRight': 0}"
+check "P2 Inbox header" "$(dump | field 'd["rows"][0]')" "{'kind': 'header', 'stream': 'inbox', 'open': 2}"
+check "P2 default horizon" "$(dump | field 'd["horizonFilter"]')" "all"
+check "P2 no move mode" "$(dump | field 'd["moving"]')" "None"
+check "P2 eight item keys" "$(dump | field 'all(set(r) == {"kind","id","status","stream","horizon","badge","priority","size"} for r in d["rows"] if r["kind"] == "item")')" "True"
+check "P2 zero priority" "$(dump | field 'next(r["priority"] for r in d["rows"] if r.get("id") == "2")')" "0"
+check "P2 tab done" "$(call tab done)" "ok"
+check "P2 Done selected" "$(dump | field 'd["tab"]')" "done"
+check "P2 day shape on any clock" "$(dump | field 'isinstance(d["rows"], list) and all(set(r) == {"kind","date","count"} for r in d["rows"] if r["kind"] == "day")')" "True"
+check "P2 tab 0" "$(call tab 0)" "ok"
+check "P2 unknown tab" "$(call tab nowhere)" "unknown stream"
+stop
+export FAKE_BOARD="$here/tests/fixtures/provisional/board-migrated.json"
+start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
+sleep 0.8
+check "P2 Inbox-only strip" "$(dump | field 'd["strip"]')" "None"
+check "P2 Inbox-only catalogue" "$(dump | field 'len(d["streams"])')" "1"
+check "P2 Inbox-only Done refusal" "$(call tab done)" "No streams yet · todocli stream add adds one"
+stop
+export FAKE_BOARD="$here/tests/fixtures/consumer/board-old-cli.json"
+start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
+sleep 0.8
+check "P2 old CLI catalogue" "$(dump | field 'd["streams"]')" "[]"
+check "P2 old CLI strip" "$(dump | field 'd["strip"]')" "None"
+stop
+
 # Any warning that names one of the plugin's files fails the run (a QML
 # error in a view shows up here, since the panel's content is built eagerly).
-if grep -q "WARN.*$here/\|Binding loop\|SMOKE load error" "$scratch/qs.log"; then
-  echo "FAIL qs log has plugin warnings:"; grep "WARN\|SMOKE" "$scratch/qs.log"; fails=$((fails + 1))
+if grep -q "WARN.*$here/\|Binding loop\|SMOKE load error" "$scratch/qs-all.log"; then
+  echo "FAIL qs log has plugin warnings:"; grep "WARN\|SMOKE" "$scratch/qs-all.log"; fails=$((fails + 1))
 fi
 
 if [ "$fails" -ne 0 ]; then echo "smoke: $fails failure(s)" >&2; exit 1; fi

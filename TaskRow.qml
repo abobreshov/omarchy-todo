@@ -4,6 +4,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "View.js" as View
+import "Priority.js" as Priority
 
 // One list row (UX §4.2): status glyph · title · plan n/m · (o) · (t) ·
 // {del}. The status glyph is the click target upstream's checkbox was; it
@@ -23,12 +24,20 @@ Item {
 
   required property var modelData
   required property var panel
+  property var itemData: modelData
+  property string badge: ""
+  property string streamCaption: ""
+  readonly property bool prioritySlot: panel.prioritySlot === true
+  readonly property bool badgeSlot: panel.badgeSlot === true
+  readonly property var priorityValue: itemData.priority
+  readonly property string priorityLevel: Priority.levelOf(priorityValue)
+  readonly property string priorityMark: Priority.markOf(priorityValue)
   property int rowIndex: 0
 
   readonly property bool current: panel.ui.cursor === rowIndex
-  readonly property bool armed: panel.ui.armedId === modelData.id
-  readonly property bool isDone: modelData.status === "done"
-  readonly property var actions: View.rowActions(modelData, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
+  readonly property bool armed: panel.ui.armedId === itemData.id
+  readonly property bool isDone: itemData.status === "done"
+  readonly property var actions: View.rowActions(itemData, { focus: panel.focusModel, pomodoro: panel.pomodoro, armed: armed })
   readonly property color fg: panel.contentForeground
   readonly property color dim: panel.dimForeground
   readonly property string family: panel.contentFontFamily
@@ -73,7 +82,7 @@ Item {
       hoverColor: slot.hotColor
       fontFamily: row.family
       fontSize: Style.font.caption
-      onClicked: row.panel.rowKey(row.modelData.id, slot.key)
+      onClicked: row.panel.rowKey(row.itemData.id, slot.key)
 
       Behavior on opacity { NumberAnimation { duration: 80 } }
     }
@@ -101,7 +110,7 @@ Item {
   MouseArea {
     anchors.fill: parent
     cursorShape: Qt.PointingHandCursor
-    onClicked: row.panel.openDetail(row.modelData.id)
+    onClicked: row.panel.openDetail(row.itemData.id)
   }
 
   Text {
@@ -109,10 +118,10 @@ Item {
     anchors.left: parent.left
     anchors.leftMargin: Style.spacing.lg
     anchors.verticalCenter: parent.verticalCenter
-    text: Model.statusGlyph(row.modelData.status)
+    text: Model.statusGlyph(row.itemData.status)
     // Ticking is no longer destructive: the box uses the accent under its
     // own pointer, and doing rows carry the accent always.
-    color: row.checkHovered || row.modelData.status === "doing"
+    color: row.checkHovered || row.itemData.status === "doing"
       ? Color.accent
       : (row.rowHovered && !row.isDone ? row.fg : row.dim)
     font.family: row.family
@@ -126,18 +135,38 @@ Item {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onContainsMouseChanged: row.checkHovered = containsMouse
-      onClicked: if (!row.panel.errored) row.panel.tickRow(row.modelData.id)
+      onClicked: if (!row.panel.errored) row.panel.tickRow(row.itemData.id)
     }
   }
 
+  Item {
+    id: priorityBox
+    anchors.left: rowCheck.right
+    anchors.leftMargin: row.prioritySlot ? Style.spacing.sm : 0
+    anchors.verticalCenter: parent.verticalCenter
+    width: row.prioritySlot ? Style.space(12) : 0
+    height: Style.space(24)
+    Text {
+      anchors.centerIn: parent
+      text: row.prioritySlot ? row.priorityMark : ""
+      color: row.isDone || row.priorityLevel === "low" || row.priorityLevel === "medium" ? row.dim : row.priorityLevel === "critical" ? Color.urgent : row.fg
+      font.family: row.family; font.pixelSize: Style.font.body
+    }
+    HoverHandler { id: priorityHover }
+    PanelToolTip {
+      visible: priorityHover.hovered && row.prioritySlot && row.priorityLevel !== ""
+      text: "priority: " + row.priorityLevel + " (" + row.priorityValue + ")"
+      fontFamily: row.family
+    }
+  }
   Text {
     id: rowTitle
-    anchors.left: rowCheck.right
+    anchors.left: priorityBox.right
     anchors.leftMargin: Style.spacing.controlGap
     anchors.right: cluster.left
     anchors.rightMargin: Style.spacing.md
     anchors.verticalCenter: parent.verticalCenter
-    text: row.modelData.name
+    text: row.itemData.name
     textFormat: Text.PlainText
     elide: Text.ElideRight
     font.strikeout: row.isDone
@@ -156,9 +185,16 @@ Item {
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.spacing.sm
 
+    Mark { anchors.verticalCenter: parent.verticalCenter; visible: row.streamCaption !== ""; text: "· " + row.streamCaption }
     Mark { anchors.verticalCenter: parent.verticalCenter; visible: row.actions.armed; text: row.actions.caption; color: Color.urgent }
     Mark { anchors.verticalCenter: parent.verticalCenter; visible: row.actions.progress !== ""; text: row.actions.progress }
 
+    BadgeSlot {
+      visible: row.badgeSlot
+      panel: row.panel; badge: row.badge
+      sizeValue: row.itemData.horizon === "short" ? row.itemData.size : null
+      anchors.verticalCenter: parent.verticalCenter
+    }
     Slot {
       visible: !row.actions.armed
       spec: row.actions.focus

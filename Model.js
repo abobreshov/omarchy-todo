@@ -179,6 +179,7 @@ function normalize(item) {
     plan: normalizePlan(item.plan),
     notes: normalizeNotes(item.notes),
     due: strOrNull(item.due),
+    completedAt: strOrNull(item.completedAt),
     author: strOrNull(item.author),
     stream: strOrNull(squish(item.stream)),
     labels: Array.isArray(item.labels) ? item.labels.filter(function(v) { return typeof v === "string" }) : [],
@@ -193,7 +194,7 @@ function copyItem(item) {
     id: item.id, uid: item.uid, name: item.name, description: item.description, status: item.status,
     plan: item.plan.map(function(s) { return { text: s.text, done: s.done } }),
     notes: item.notes.map(function(n) { return { at: n.at, text: n.text } }),
-    due: item.due, author: item.author,
+    due: item.due, author: item.author, completedAt: strOrNull(item.completedAt),
     stream: item.stream, labels: item.labels.slice(), horizon: item.horizon,
     priority: item.priority, size: item.size
   }

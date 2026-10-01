@@ -16,7 +16,16 @@ runner="${QMLTESTRUNNER:-/usr/lib/qt6/bin/qmltestrunner}"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/qsroot"
-ln -sfn "$shell_dir" "$scratch/qsroot/qs"
+mkdir -p "$scratch/qsroot/qs/Ui"
+ln -sfn "$shell_dir/Commons" "$scratch/qsroot/qs/Commons"
+for source in "$shell_dir"/Ui/*; do
+  ln -sfn "$source" "$scratch/qsroot/qs/Ui/$(basename "$source")"
+done
+# Headless seams replace only window/lifecycle bases; the tested Panel.qml
+# and all list components are the production files, with real kit controls.
+rm "$scratch/qsroot/qs/Ui/Panel.qml" "$scratch/qsroot/qs/Ui/KeyboardPanel.qml"
+cp "$here/tests/qml/imports/PanelBase.qml" "$scratch/qsroot/qs/Ui/Panel.qml"
+cp "$here/tests/qml/imports/KeyboardPanelBase.qml" "$scratch/qsroot/qs/Ui/KeyboardPanel.qml"
 
 set +e
 QT_QPA_PLATFORM=offscreen "$runner" \

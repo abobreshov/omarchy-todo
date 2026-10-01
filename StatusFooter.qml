@@ -10,7 +10,7 @@ Item {
 
   required property var panel
   readonly property var model: panel.footerModel
-  readonly property string message: panel.message
+  readonly property string message: panel.movePrompt !== undefined && panel.movePrompt !== "" ? panel.movePrompt : panel.message
   readonly property bool showingMessage: message !== ""
   readonly property bool urgent: !showingMessage && model !== null && model.urgent
   readonly property bool clickable: !showingMessage && model !== null && model.action !== null
