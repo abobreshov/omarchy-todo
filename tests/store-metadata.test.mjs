@@ -213,3 +213,16 @@ test("setStatus refuses a missing clock without changing any field", () => {
     }
   }
 });
+
+// ADDENDUM-S11 §4.7.4: `northStar` by key presence, never by value.
+test("AC-ST.86: fromCli reads northStar and hasNorthStar; absent means an older todocli", () => {
+  const ns = (raw) => { const d = Store.fromCli(raw); return [d.ok, d.hasNorthStar, d.northStar]; };
+  assert.deepEqual(ns(fixture("consumer/board-empty-stream.json")), [true, false, null], "the older-todocli board");
+  assert.deepEqual(ns(fixture("contract/board.json")), [true, true, null]);
+  assert.deepEqual(ns(fixture("contract/board-streams.json")), [true, true, null]);
+  assert.deepEqual(ns(fixture("contract/board-northstar.json")), [true, true, fixture("contract/board-northstar.json").northStar]);
+  for (const bad of [42, "text", [], { title: "", description: "" }]) assert.deepEqual(ns({ version: 1, tasks: [], northStar: bad }), [true, true, null], JSON.stringify(bad));
+  assert.deepEqual(ns({ version: 1, tasks: [], northStar: { title: " a\r\nb ", description: "c\r\n" } }), [true, true, { title: "a b", description: "c", updatedAt: null, via: null }]);
+  assert.deepEqual(ns(JSON.stringify({ version: 1, tasks: [], northStar: undefined })), [true, false, null], "undefined does not survive JSON");
+  assert.deepEqual(Store.fromCli({ version: 2, tasks: [], northStar: {} }).ok, false, "the version check still comes first");
+});

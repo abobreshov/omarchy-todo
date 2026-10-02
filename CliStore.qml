@@ -73,6 +73,8 @@ TodoStore {
       // so it never undoes an optimistic change.
       streams = doc.streams
       hasStreams = doc.hasStreams
+      northStar = doc.northStar
+      hasNorthStar = doc.hasNorthStar
       items = doc.items
       focus = doc.focus
       sync = doc.sync

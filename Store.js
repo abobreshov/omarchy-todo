@@ -2,6 +2,7 @@
 .import "Model.js" as Model
 .import "Priority.js" as Priority
 .import "Errors.js" as Errors
+.import "NorthStar.js" as NorthStar
 
 // The two document shapes and the one mutation API (PLAN §6.3, §6.4, A17,
 // A34). Pure and total, as Model.js; both stores apply every change through
@@ -93,8 +94,10 @@ function normalizeSync(sync) {
   return out
 }
 
-// `board --json` -> { ok, items, focus, streams, hasStreams, sync, stamp } or
-// the protocol error (E8) for a document this panel does not understand.
+// `board --json` -> { ok, items, focus, streams, hasStreams, northStar,
+// hasNorthStar, sync, stamp } or the protocol error (E8) for a document this
+// panel does not understand. `hasNorthStar` is the key's presence: a board
+// without it comes from an older todocli, never an unset North Star (§3.2.3).
 // `stamp` is the change stamp's path (§3.10) as todocli publishes it, or
 // null from a build that does not; the store watches its directory.
 function fromCli(raw) {
@@ -124,6 +127,7 @@ function fromCli(raw) {
   return {
     ok: true, items: items, focus: focus,
     streams: Model.normalizeStreams(data.streams), hasStreams: Array.isArray(data.streams),
+    northStar: NorthStar.normalize(data[NorthStar.BOARD_KEY]), hasNorthStar: Object.prototype.hasOwnProperty.call(data, NorthStar.BOARD_KEY),
     sync: normalizeSync(data.sync), stamp: Model.strOrNull(data.stamp)
   }
 }

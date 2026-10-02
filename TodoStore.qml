@@ -10,6 +10,8 @@ QtObject {
   property var items: []
   property var streams: []
   property bool hasStreams: false
+  property var northStar: null        // NorthStar.normalize's value; cli only
+  property bool hasNorthStar: false   // the board carried the key (ADDENDUM-S11 §4.7.4)
   property var focus: ({ text: "", taskId: null })
   property bool loaded: false
   property var error: null      // {kind, message} | null (UX §7 E4, E5, E7, E8)
