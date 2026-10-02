@@ -4,6 +4,7 @@
 .import "Tabs.js" as Tabs
 .import "Pickers.js" as Pickers
 .import "RowActions.js" as RowActions
+.import "NorthStar.js" as NorthStar
 
 // The view decisions and the copy (UX §3.1, §4.2, §4.4, §4.5, §4.7, §10.3):
 // the list's order and the session's done rows, the focus line, the detail
@@ -127,13 +128,17 @@ function emptyCopy(items) {
   return null
 }
 
-function helpLine(view, backend, hasStreams, stripShown, tab, picker) {
+// `hasNorthStar`: the board carried the key (ADDENDUM-S11 §4.7.3). The list
+// and Done lines gain ` · * north star` before ` · r reload` in cli mode;
+// called with six arguments, the lines are 2.1.2's.
+function helpLine(view, backend, hasStreams, stripShown, tab, picker, hasNorthStar) {
   if (picker) return Pickers.help(picker.kind)
   var controls = backend === "cli" && hasStreams ? " · " + Pickers.entryHelp() : ""
+  var star = backend === "cli" && hasNorthStar === true ? NorthStar.HELP_ITEM : ""
   if (view === "detail") return "Enter step · d done · s doing · f focus · p pomodoro" + controls + " · x x or Del delete · Esc back"
-  if (tab === "done") return "d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs · r reload · R sync · Tab next panel"
+  if (tab === "done") return "d reopen · Enter open · x x or Del delete · [ ] 0-9 tabs" + star + " · r reload · R sync · Tab next panel"
   var extra = backend === "cli" && hasStreams ? (stripShown ? " · m move · [ ] 0-9 tabs" : "") + " · v horizon" : ""
-  return "n new · d done · s doing · f focus · p pomodoro" + controls + extra + " · x x or Del delete · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
+  return "n new · d done · s doing · f focus · p pomodoro" + controls + extra + " · x x or Del delete" + star + " · r reload" + (backend === "cli" ? " · R sync" : "") + " · Tab next panel"
 }
 
 // ---------------------------------------------------------------- row cluster

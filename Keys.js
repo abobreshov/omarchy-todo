@@ -5,6 +5,7 @@
 .import "Cursor.js" as Cursor
 .import "Streams.js" as Streams
 .import "Pickers.js" as Pickers
+.import "NorthStarKeys.js" as NorthStarKeys
 
 // Key resolution and the panel's view-state reducer (UX §4.5, §7; PLAN
 // §6.8, A20). Pure: `keyAction` turns a key into a store action (or a
@@ -61,7 +62,7 @@ function isDoneRow(item) {
 }
 
 // Resolve one text key. `ctx`: { item, onFocusLine, focus, backend,
-// sessionDone, pomodoro }. Returns an action object or null.
+// sessionDone, pomodoro, northStar }. Returns an action object or null.
 function keyAction(view, key, ctx) {
   var c = ctx || {}
   if (view === "compose") return null
@@ -72,6 +73,7 @@ function keyAction(view, key, ctx) {
   // Which row, and whether this press arms or confirms, is the reducer's.
   if (isDeleteKey(key)) return { type: "delete" }
   if (key === "?") return { type: "toggleHelp" }
+  if (view === "list" && key === "*") return NorthStarKeys.keyIntent(c.northStar)
   if (view === "list" && (key === "n" || key === "N" || key === "+")) return { type: "compose" }
   var item = c.item || null
   if (c.onFocusLine && !item) {
@@ -112,7 +114,7 @@ function rowAt(ui, ctx) {
 function keyContext(ui, ctx) {
   var c = {
     backend: ctx.backend, focus: ctx.focus, sessionDone: ctx.sessionDone, pomodoro: ctx.pomodoro,
-    item: null, onFocusLine: false, currentTab: ctx.currentTab
+    item: null, onFocusLine: false, currentTab: ctx.currentTab, northStar: ctx.northStar
   }
   if (ui.view === "detail") {
     c.item = findInRows(ctx, ui.selectedId)
@@ -341,7 +343,7 @@ function reduceUi(ui, event, ctx) {
       if (action && action.type === "delete") { if (!c.busy) handleDelete(next, c, ev, actions); break }
       disarm(next)
       if (!action) break
-      if (c.busy && ["refresh", "syncNow", "toggleHelp"].indexOf(action.type) === -1) break
+      if (c.busy && ["refresh", "syncNow", "toggleHelp", "northStar"].indexOf(action.type) === -1) break
       if (action.type === "toggleHelp") next.help = !next.help
       else if (action.type === "compose") openCompose(next, "", actions)
       else actions.push(action)
@@ -360,6 +362,7 @@ function panelContext(p) {
     currentTab: p.currentTab, tabKey: p.tabKey, catalogue: p.catalogue, previousCatalogue: p.previousCatalogue,
     hasStreams: p.store.hasStreams, items: p.items, busy: p.errored, idMap: p.storeIdMap,
     rows: p.rows, steps: p.detailItem ? p.detailItem.plan.length : 0, backend: p.backend, focus: p.focusModel,
-    sessionDone: p.liveSessionDone, pomodoro: p.pomodoro, prefill: p.focusModel && p.focusModel.text ? p.focusModel.text : ""
+    sessionDone: p.liveSessionDone, pomodoro: p.pomodoro, prefill: p.focusModel && p.focusModel.text ? p.focusModel.text : "",
+    northStar: { backend: p.backend, loaded: p.store.loaded, hasNorthStar: p.store.hasNorthStar }
   }
 }

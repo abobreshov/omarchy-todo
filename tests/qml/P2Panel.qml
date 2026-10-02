@@ -13,6 +13,7 @@ QtObject {
   property bool errored: false
   property bool ready: true
   property bool opened: false
+  property var store: ({ hasNorthStar: false })
   property string currentTab: "I"
   property string tabKey: currentTab
   property color contentForeground: "#ffffff"

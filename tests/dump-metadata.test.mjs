@@ -57,7 +57,7 @@ test('the extracted QML context/snapshot preserves dump keys, including empty an
       stripShown:!blank,strip:{first:1,last:3,hiddenLeft:0,hiddenRight:0},displayRows:[],latches:{},sessionReopened:{},viewDayStart:0,
       footerModel:{text:'todocli · local only',urgent:false},banner:blank?'':'Busy',message:blank?'':'Saved'};
     const state=View.panelState(p), context=Keys.panelContext(p);
-    assert.deepEqual(context,{currentTab:p.currentTab,tabKey:p.tabKey,catalogue:p.catalogue,previousCatalogue:[],hasStreams:true,items:doc.items,busy:false,idMap:{},rows:[],steps:blank?0:1,backend:'cli',focus:doc.focus,sessionDone:{},pomodoro:{},prefill:doc.focus.text});
+    assert.deepEqual(context,{currentTab:p.currentTab,tabKey:p.tabKey,catalogue:p.catalogue,previousCatalogue:[],hasStreams:true,items:doc.items,busy:false,idMap:{},rows:[],steps:blank?0:1,backend:'cli',focus:doc.focus,sessionDone:{},pomodoro:{},prefill:doc.focus.text,northStar:{backend:'cli',loaded:p.store.loaded,hasNorthStar:true}});
     assert.deepEqual(View.dumpView(state),View.dumpView({...base,view,items:doc.items,catalogue:doc.streams,hasStreams:true,focus:doc.focus,tab:'overview',strip:blank?null:p.strip,displayRows:[],dayStart:0,latches:{},reopened:{},banner:blank?null:'Busy',message:blank?null:'Saved',footer:view==='error'?null:p.footerModel}));
     const empty=Keys.panelContext({...p,focusModel:null}); assert.equal(empty.prefill,'');
   }

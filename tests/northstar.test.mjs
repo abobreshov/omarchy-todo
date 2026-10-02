@@ -98,7 +98,7 @@ test("AC-ST.70: the star's state; a failing read after a good one leaves it", ()
   assert.equal(NorthStar.iconTooltip(s({ backend: "json" })), "");
 });
 
-test("the popup's body state, staleness and the `?` item's availability", () => {
+test("the popup's body state and staleness", () => {
   assert.equal(NorthStar.bodyState(s({ backend: "json", hasNorthStar: false, northStar: null })), "json");
   assert.equal(NorthStar.bodyState(s({ loaded: false })), "loading");
   assert.equal(NorthStar.bodyState(s({ loaded: false, error: E4 })), "error");
@@ -106,7 +106,6 @@ test("the popup's body state, staleness and the `?` item's availability", () => 
   assert.equal(NorthStar.bodyState(withKey(null)), "unset");
   assert.equal(NorthStar.bodyState(s()), "set");
   assert.deepEqual([s(), s({ error: E7 }), s({ loaded: false, error: E4 }), s({ backend: "json", error: E7 })].map(NorthStar.isStale), [false, true, false, false]);
-  assert.deepEqual([s(), withKey(null), s({ hasNorthStar: false }), s({ backend: "json" }), s({ loaded: false }), null].map(NorthStar.available), [true, true, false, false, false, false]);
 });
 
 test("AC-ST.81: the caption, local time under TZ=Europe/London", () => {

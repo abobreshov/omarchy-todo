@@ -123,9 +123,6 @@ function bodyState(s) {
 // Stale, not blank (ND-38): a read had applied and the store reports an error.
 function isStale(s) { return s.backend === "cli" && s.loaded === true && !!s.error }
 
-// The `?` item's condition: cli mode and the key present, set or unset.
-function available(s) { return !!s && s.backend === "cli" && s.loaded === true && s.hasNorthStar === true }
-
 function heading(ns) { return ns && ns.title !== "" ? ns.title : NAME }
 
 // `North Star · updated 20:40 · via cli`; `<when>` is the local note time.

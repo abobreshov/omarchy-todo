@@ -210,6 +210,7 @@ Panel {
       case "close": root.close(); break
       case "switchPanel": root.switchPanel(action.direction); break
       case "composeOpened": bodyPanel.openCompose(action.prefill); break
+      case "northStar": if (hostWidget) hostWidget.openNorthStar(); break
       default: break
     }
   }
