@@ -8,6 +8,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { lib, here } from "./helpers.mjs";
 
+// The captions' HH:MM are London's; the pin lives here, not in how the
+// suite is run.
+process.env.TZ = "Europe/London";
 const NorthStar = lib("NorthStar.js");
 const Store = lib("Store.js");
 const fixture = (name) => fs.readFileSync(path.join(here, "fixtures", name), "utf8");

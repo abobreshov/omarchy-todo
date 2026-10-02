@@ -48,16 +48,26 @@ Item {
     }
     function init() { popup.close(); host.opens = 0; store.refreshes = 0; fakeBar.vertical = false; read(ns1); wait(0) }
 
+    // The button's rect in a grab, pixel by pixel.
+    function pixelsOf(img, item) {
+      var p = item.mapToItem(top, 0, 0), out = []
+      for (var x = Math.floor(p.x); x < p.x + item.width; x++) for (var y = Math.floor(p.y); y < p.y + item.height; y++) out.push(String(img.pixel(x, y)))
+      return out
+    }
     function test_the_star_slot_never_changes_only_its_colour_and_mark() {
-      var slot = Style.bar.iconSlot
+      var slot = Style.bar.iconSlot, away = []
       for (var state of ["unset", "set"]) for (var open of [false, true]) for (var hover of [false, true]) {
         button.starState = state; button.popupOpen = open
         if (hover) mouseMove(button, 3, 3); else mouseMove(top, 1, 1)
-        compare([button.visible, button.width, button.height, button.button.text], [true, slot, fakeBar.barSize, NorthStar.GLYPH], state + open + hover)
+        compare([button.visible, button.width, button.height, button.button.text, button.button.tooltipHovered], [true, slot, fakeBar.barSize, NorthStar.GLYPH, hover], state + open + hover)
         compare(String(button.button.foreground), String(state === "set" ? Color.accent : fakeBar.barForeground))
         tryCompare(button.button, "opacity", state === "set" ? 1 : 0.45)
         tryCompare(button.openMark, "opacity", open ? 0.9 : 0)
         compare([button.openMark.x, button.openMark.y, button.openMark.width, button.openMark.height], [Math.round((slot - Style.space(10)) / 2), fakeBar.barSize - 2 * Style.space(2), Style.space(10), Style.space(2)], "B5: only the mark's opacity changes")
+        // §5.2 "Hover: only the tooltip; no fill, and nothing moves": the drawn slot is the same pixels.
+        var shot = pixelsOf(grabImage(top), button)
+        if (!hover) away = shot
+        else compare(shot.filter(function(c, i) { return c !== away[i] }).length, 0, state + open + ": hover draws nothing")
       }
       button.starState = "hidden"
       compare(button.visible, false)
@@ -88,6 +98,7 @@ Item {
       compare([desc.text, desc.lineCount], [nsD, 3], "the empty middle line kept")
       compare([part("northStarEditHint").text, part("northStarHistoryHint").text], [NorthStar.EDIT_HINT, NorthStar.HISTORY_HINT])
       compare(String(part("northStarGlyph").color), String(Color.accent))
+      compare([String(body().dim), String(body().fg)], [String(Qt.darker(fakeBar.foreground, 1.5)), String(fakeBar.foreground)], "the todo panel's colours")
       for (var name of ["northStarNoDescription", "northStarMessage", "northStarMessageCaption", "northStarStale", "northStarHelp"]) compare(part(name).text, "", name)
       read({ title: nsT })
       compare([part("northStarNoDescription").text, part("northStarDescription").text], ["No description yet.", ""])

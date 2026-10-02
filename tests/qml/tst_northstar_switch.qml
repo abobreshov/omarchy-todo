@@ -107,6 +107,20 @@ Item {
       compare([panel().ui.moving, panel().store.queue.length, panel().store.writeProc.command], [null, 0, []], "move mode ended, no move sent")
     }
 
+    // `*` as a real key event through the kit's PanelKeyCatcher, from
+    // Shift+8 and from the keypad, both ways (the MAN-NS3 keys, headless).
+    function test_star_from_shift8_and_keypad_both_ways() {
+      for (var mod of [Qt.ShiftModifier, Qt.KeypadModifier]) {
+        rig.widget.open(); rig.todoBody().focusTarget.forceActiveFocus()
+        keyPress(Qt.Key_Asterisk, mod); keyRelease(Qt.Key_Asterisk, mod)
+        compare([rig.dump().panelOpen, popupOpen()], [false, true], "the todo panel's * " + mod)
+        rig.popupKeys().forceActiveFocus()
+        keyPress(Qt.Key_Asterisk, mod); keyRelease(Qt.Key_Asterisk, mod)
+        compare([rig.dump().panelOpen, popupOpen()], [true, false], "the popup's * " + mod)
+        rig.widget.close()
+      }
+    }
+
     function test_never_two_popups() {
       rig.bar.next = other
       var steps = [["toggle", function() { rig.widget.togglePanel() }, rig.widget], ["northStar", function() { rig.widget.northStarIpc() }, rig.popup(), "todo"],

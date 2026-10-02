@@ -13,7 +13,8 @@ Item {
   id: top
   width: 480; height: 160
   NorthStarRig { id: rig; anchors.fill: parent }
-  // 2.1.2's pill for the same document: e2b0985's WidgetButton, verbatim.
+  // 2.1.2's pill for the same document: e2b0985's pill bindings (its
+  // anchors.fill was the implicit size: Bar.qml ModuleSlot L1814-1817).
   WidgetButton {
     id: ref212
     y: 100

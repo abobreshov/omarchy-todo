@@ -39,13 +39,16 @@ Item {
       for (var k in over || {}) store[k] = over[k]
       popup.backend = "cli"
     }
-    // Pixels in the window rect (x, y, w, h) that are not the card's colour;
-    // `first` stops at the first one (a line only needs some ink).
+    // Pixels in the window rect (x, y, w, h) that stand off the card: a
+    // channel at least 0.2 from its colour, so a line tinted a few per cent
+    // over the card is not drawn. `first` stops at the first one (a line
+    // only needs some ink).
+    function legible(c) { var b = card.color; return Math.max(Math.abs(c.r - b.r), Math.abs(c.g - b.g), Math.abs(c.b - b.b)) >= 0.2 }
     function inkIn(img, x, y, w, h, first) {
       var n = 0
       for (var px = Math.max(0, Math.floor(x)); px < Math.min(img.width, x + w); px++)
         for (var py = Math.max(0, Math.floor(y)); py < Math.min(img.height, y + h); py++)
-          if (!Qt.colorEqual(img.pixel(px, py), card.color) && ++n && first) return n
+          if (legible(img.pixel(px, py)) && ++n && first) return n
       return n
     }
     function ink(img, item) { var p = item.mapToItem(top, 0, 0); return inkIn(img, p.x, p.y, item.width, item.height, true) }
