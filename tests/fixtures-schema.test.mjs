@@ -25,7 +25,9 @@ const expected = json("consumer", "expected.json");
 // archived-home and empty-stream as "§3.1 with …" and §3.1 (A3) has one
 // target, so the two differ from the seed in that block alone, and compare
 // against consumerSeed: the §3.1 seed with the historical block.
-const consumerSeed = { ...seed, sync: json("consumer", "board-old-cli.json").sync };
+// The consumer boards are pre-S11 too (ADDENDUM-S11 §4.9): no northStar key.
+const { northStar: _s11Key, ...preS11Seed } = seed;
+const consumerSeed = { ...preS11Seed, sync: json("consumer", "board-old-cli.json").sync };
 const OLD_CLI_SHA256 = "a2afa400e35e8094027307a76f9e4e425f8cb0f9302be1405765e8db444061da";
 const NOW = "2026-09-29T09:10:11.561Z";
 const defaults = { stream: "inbox", labels: [], horizon: "short", priority: null, size: null };
@@ -34,7 +36,7 @@ const streamKeys = ["uid", "key", "group", "name", "position", "system", "create
 const inbox = { uid: "00000000-0000-7000-8000-000000000001", key: "inbox", group: null, name: "inbox", position: 0, system: true, createdAt: "2026-09-30T00:00:00.000Z", archivedAt: null };
 const files = {
   contract: [
-    "board-streams.json", "board.json", "envelope-auth.json",
+    "board-northstar.json", "board-streams.json", "board.json", "envelope-auth.json",
     "envelope-auth_unreachable.json", "envelope-busy.json", "envelope-config.json",
     "envelope-db.json", "envelope-error.json", "envelope-list_gone.json",
     "envelope-not_found.json", "envelope-offline.json", "envelope-rate_limited.json",
@@ -66,8 +68,15 @@ function checkTask(t, keys = taskKeys) {
   if (t.size !== null) assert.equal(t.horizon, "short");
 }
 
-function checkBoard(board, countOpen) {
-  assert.deepEqual(Object.keys(board), ["version", "focus", "focus_task", "tasks", "streams", "sync", "stamp"]);
+// The top-level keys by directory (ADDENDUM-S11 §4.9): contract/ holds the S11
+// producer's boards, with northStar; consumer/ holds frozen pre-S11 inputs.
+const boardKeys = {
+  contract: ["version", "focus", "focus_task", "tasks", "streams", "northStar", "sync", "stamp"],
+  consumer: ["version", "focus", "focus_task", "tasks", "streams", "sync", "stamp"]
+};
+
+function checkBoard(board, countOpen, keys) {
+  assert.deepEqual(Object.keys(board), keys);
   assert.equal(board.version, 1);
   board.tasks.forEach((t) => checkTask(t));
   ascending(ids(board.tasks));
@@ -118,7 +127,7 @@ test("§§1–3 board schemas, task id order, catalogue order and open counts", 
     for (const file of names.filter((f) => (f === "board.json" || f.startsWith("board-")) && f !== "board-old-cli.json")) {
       // Archived-home has precisely two task edits and unchanged seed counts:
       // its inconsistency is adversarial by design (contract §12.3).
-      checkBoard(json(dir, file), file !== "board-archived-home.json");
+      checkBoard(json(dir, file), file !== "board-archived-home.json", boardKeys[dir]);
     }
   }
 });
@@ -169,7 +178,7 @@ test("§3.1 migrated-only board appends defaults and inserts the sole Inbox", ()
   const migrated = {
     version: old.version, focus: old.focus, focus_task: old.focus_task,
     tasks: old.tasks.map((t) => ({ ...t, ...defaults })),
-    streams: [{ ...inbox, open: 1 }], sync: seed.sync, stamp: old.stamp
+    streams: [{ ...inbox, open: 1 }], northStar: null, sync: seed.sync, stamp: old.stamp
   };
   assert.deepEqual(json("contract", "board.json"), migrated);
 });

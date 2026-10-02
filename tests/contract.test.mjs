@@ -28,8 +28,9 @@ const fake = path.join(here, "fakebin", "todocli");
 // sha256 of every vendored golden; todocli's tests/contract.rs regenerates
 // them and fails when a sibling checkout's copy differs.
 const PINS = {
-  "board-streams.json": "ec6551e4b8a995265f14556f3f33be8ff2b2273c0c83f29ab3ae51496d9233c0",
-  "board.json": "03439cd8dd85a61d8afd710a7a7ba6a0b42347670ae463deb1e50d6ce0edd59d",
+  "board-northstar.json": "85db3acc7491eae8d2fe98ab4886ea71a3536a4b8d90ea0f1af67193e7037fad",
+  "board-streams.json": "565608d76877d4113a5e863fff2a64130114e32ee57c9f6e97ecd47a855952ee",
+  "board.json": "092dc95b7d68cadf79f3a0d678f4d01c68a3ae6bb3fbf1a7c207cd02d1ebed5d",
   "envelope-auth.json": "df0146f24ce4d920f1a3553f1bf5c0c99be3b3a0cd09e78be9e4ec5ca5888373",
   "envelope-auth_unreachable.json": "c37cf36963da0cce37bdd78a18b66d391eddd20ecb2c5585bde0cf25f8e6dcb0",
   "envelope-busy.json": "2b817a4aed957e7e460762f5da85d4ca1ed25d1b85ba6a3b00184008665e6d45",
@@ -119,7 +120,7 @@ test("the goldens are the shapes this panel parses: the board, every write reply
 // (the streams order is pinned by §8, so an index is allowed there).
 test("the S9 goldens carry the five task keys, the streams catalogue and typed details", () => {
   const streams = JSON.parse(golden("board-streams.json"));
-  assert.deepEqual(Object.keys(streams), ["version", "focus", "focus_task", "tasks", "streams", "sync", "stamp"]);
+  assert.deepEqual(Object.keys(streams), ["version", "focus", "focus_task", "tasks", "streams", "northStar", "sync", "stamp"]);
   assert.deepEqual(streams.tasks.map((t) => t.id), [1, 2, 3, 4, 5, 6, 7, 8], "id order, the doing #3 third");
   assert.equal(streams.tasks.find((t) => t.id === 2).priority, 0);
   assert.equal(streams.tasks.find((t) => t.id === 4).priority, 90);
