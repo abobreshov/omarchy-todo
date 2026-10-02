@@ -6,11 +6,15 @@ import "Model.js" as Model
 import "Store.js" as Store
 import "Chrome.js" as Chrome
 import "Pomodoro.js" as Pomodoro
+import "NorthStar.js" as NorthStar
+import "NorthStarKeys.js" as NorthStarKeys
 
-// Bar button for the todo plugin. Owns this instance's IPC handler and the
-// pill; the list, the editor, the stores and the save file all live in
-// Panel.qml, which is loaded eagerly so the list hydrates as soon as the
-// shell starts rather than waiting for the first click.
+// Bar button for the todo plugin. Owns this instance's IPC handler, the
+// pill and the North Star's star and popup (ADDENDUM-S11 §5.1: one widget,
+// two buttons, two popout owners); the list, the editor, the stores and the
+// save file all live in Panel.qml, which is loaded eagerly so the list
+// hydrates as soon as the shell starts rather than waiting for the first
+// click. The star and its popup read Panel.qml's store: no second read.
 //
 // One IpcHandler per widget instance is the shell's own pattern
 // (Ui/BarWidget.qml, the first-party clock): the target routes to one
@@ -35,6 +39,7 @@ BarWidget {
   readonly property var pill: panel ? panel.pill : Chrome.pillState({ vertical: root.vertical, maxChars: Model.DEFAULTS.maxChars })
   // Forwarded so opening another widget's popup closes this one cleanly.
   readonly property bool popoutSwitchClosing: panel ? panel.popoutSwitchClosing === true : false
+  readonly property var northStarState: panel ? northStarPanel.northStarState : null
 
   function injectPanel() {
     var target = panelLoader.item
@@ -48,7 +53,8 @@ BarWidget {
   }
 
   function open() { if (panel) panel.open() }
-  function close() { if (panel) panel.close() }
+  // `close`/`hide` close whichever of the two popups is open.
+  function close() { if (panel) panel.close(); northStarPanel.close() }
   function togglePanel() { if (panel) panel.toggle() }
   function closeForPopoutSwitch() { if (panel) panel.closeForPopoutSwitch() }
   // The `refresh()` IPC push lands on one instance and is relayed here.
@@ -62,8 +68,24 @@ BarWidget {
     return r.action ? root.perform(r.action) : r.reply
   }
 
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  // The North Star (§4.7.1): `*` and IPC open the popup, a click toggles it.
+  function openNorthStar() { northStarPanel.open() }
+  function toggleNorthStar() { northStarPanel.toggle() }
+  function northStarIpc() {
+    var r = NorthStarKeys.ipcIntent(Object.assign({ panelLoaded: !!panel, popupOpen: northStarPanel.opened }, northStarPanel.northStarState))
+    if (r.action !== "none") r.action === "open" ? northStarPanel.open() : northStarPanel.close()
+    return r.reply
+  }
+  // Today's dump with §4.7.2's four keys appended.
+  function dump() {
+    if (!panel) return "unavailable"
+    var d = JSON.parse(panel.dump()), extra = NorthStar.dumpOf(northStarState, panel.opened, northStarPanel.opened)
+    for (var k in extra) d[k] = extra[k]
+    return JSON.stringify(d)
+  }
+
+  implicitWidth: buttons.implicitWidth
+  implicitHeight: buttons.implicitHeight
 
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
@@ -140,33 +162,58 @@ BarWidget {
 
     function tab(name: string): string { return root.panel ? root.panel.tab(name) : "unavailable" }
 
-    function dump(): string {
-      if (!root.panel) return "unavailable"
-      return root.panel.dump()
+    function dump(): string { return root.dump() }
+    function northStar(): string { return root.northStarIpc() } // SUPER + ALT + N
+  }
+
+  // The pill, then the star (§5.2): a row on a horizontal bar, a column on a
+  // vertical one. The pill never moves, and a hidden star takes no slot, so
+  // the widget is then 2.1.2's size exactly (§5.8 B3, B4).
+  Grid {
+    id: buttons
+    columns: root.vertical ? 1 : 2
+
+    // One WidgetButton (UX §3.3): the label auto-sizes the slot on horizontal
+    // bars; icon-only keeps upstream's iconSlot; vertical bars are icon-only.
+    WidgetButton {
+      id: button
+      objectName: "todoPill"
+      bar: root.bar
+      text: root.pill.glyph + (root.pill.label !== "" ? " " + root.pill.label : "")
+      fontSize: Style.bar.iconFont
+      fixedWidth: !root.vertical && root.pill.label === "" ? Style.bar.iconSlot : -1
+      fixedHeight: root.vertical ? Style.bar.iconSlot : -1
+      active: root.pill.urgent
+      dimmed: root.pill.dimmed
+      tooltipText: root.pill.tooltip
+
+      onPressed: function(pressedButton) {
+        if (pressedButton === Qt.LeftButton) root.togglePanel()
+        else if (pressedButton === Qt.MiddleButton) {
+          // UX §3.4: the same function as `p` on the focus line; no focus
+          // toggles the panel.
+          if (!root.panel || root.panel.startPomodoro("focus") === Pomodoro.NO_FOCUS) root.togglePanel()
+        }
+      }
+    }
+
+    NorthStarButton {
+      bar: root.bar
+      starState: NorthStar.barState(root.northStarState)
+      tooltipText: NorthStar.iconTooltip(root.northStarState)
+      popupOpen: northStarPanel.opened
+      onActivated: root.toggleNorthStar()
     }
   }
 
-  // One WidgetButton (UX §3.3): the label auto-sizes the slot on horizontal
-  // bars; icon-only keeps upstream's iconSlot; vertical bars are icon-only.
-  WidgetButton {
-    id: button
-    anchors.fill: parent
+  // Its own popout owner (ND-31): the bar's coordinator closes the todo panel
+  // when it opens, and the reverse. It reads the todo panel's store.
+  NorthStarPanel {
+    id: northStarPanel
     bar: root.bar
-    text: root.pill.glyph + (root.pill.label !== "" ? " " + root.pill.label : "")
-    fontSize: Style.bar.iconFont
-    fixedWidth: !root.vertical && root.pill.label === "" ? Style.bar.iconSlot : -1
-    fixedHeight: root.vertical ? Style.bar.iconSlot : -1
-    active: root.pill.urgent
-    dimmed: root.pill.dimmed
-    tooltipText: root.pill.tooltip
-
-    onPressed: function(pressedButton) {
-      if (pressedButton === Qt.LeftButton) root.togglePanel()
-      else if (pressedButton === Qt.MiddleButton) {
-        // UX §3.4: the same function as `p` on the focus line; no focus
-        // toggles the panel.
-        if (!root.panel || root.panel.startPomodoro("focus") === Pomodoro.NO_FOCUS) root.togglePanel()
-      }
-    }
+    hostWidget: root
+    anchorItem: button
+    store: root.panel ? root.panel.store : null
+    backend: root.panel ? root.panel.backend : "json"
   }
 }
