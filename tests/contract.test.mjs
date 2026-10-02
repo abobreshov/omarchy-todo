@@ -22,6 +22,7 @@ const Store = lib("Store.js");
 const Queue = lib("Queue.js");
 const Errors = lib("Errors.js");
 const Argv = lib("Argv.js");
+const NorthStar = lib("NorthStar.js");
 const dir = path.join(here, "fixtures", "contract");
 const fake = path.join(here, "fakebin", "todocli");
 
@@ -188,23 +189,34 @@ function todocliBin() {
   return bin;
 }
 
-test("the real todocli under an isolated environment prints the shapes the goldens hold", (t) => {
+// The sandbox every live case runs in: a fresh root holding HOME, XDG_*,
+// the config and the database, removed after the test. The config turns the
+// refresh push off, so no write reaches a running shell.
+function sandbox(t) {
   const bin = todocliBin();
   if (!bin) {
     assert.equal(process.env.TODOCLI_REQUIRE_BIN, undefined, "TODOCLI_REQUIRE_BIN is set but TODOCLI_BIN is unset; the live case runs only with an absolute TODOCLI_BIN");
     t.skip("no todocli binary (TODOCLI_BIN unset; the live case runs only with an absolute TODOCLI_BIN)");
-    return;
+    return null;
   }
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "todo-contract-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const home = path.join(root, "home");
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(root, "config.toml"), "[omarchy]\npush = false\n");
   const env = {
     HOME: home, XDG_CONFIG_HOME: path.join(root, "xdg", "config"), XDG_DATA_HOME: path.join(root, "xdg", "data"),
     XDG_STATE_HOME: path.join(root, "xdg", "state"), XDG_CACHE_HOME: path.join(root, "xdg", "cache"),
     TODOCLI_CONFIG: path.join(root, "config.toml"), TODOCLI_DB: path.join(root, "todo.sqlite3"),
     PATH: "/usr/bin:/bin", LANG: "C.UTF-8", TZ: "UTC"
   };
+  return { bin, root, home, env };
+}
+
+test("the real todocli under an isolated environment prints the shapes the goldens hold", (t) => {
+  const box = sandbox(t);
+  if (!box) return;
+  const { bin, root, home, env } = box;
   const run = (action) => {
     const r = spawnSync(bin, Argv.forAction(bin, action).slice(1), { env, encoding: "utf8", cwd: home });
     return { code: r.status, stdout: r.stdout || "", stderr: r.stderr || "", spawnFailed: !!r.error };
@@ -244,4 +256,25 @@ test("the real todocli under an isolated environment prints the shapes the golde
   assert.equal(missing.stdout, golden("envelope-not_found.json"), "the envelope carries no path, so its bytes are the golden's");
   assert.equal(Errors.parseEnvelope(missing.stdout).kind, "not_found");
   assert.ok(!fs.existsSync(path.join(os.homedir(), ".local", "state", "todocli", "contract-probe")), "nothing outside the sandbox");
+});
+
+// AC-40.44, the panel half (ADDENDUM-S11 §3.4): the live todocli stores a
+// title and a description holding Cyrillic, U+1F31F, a combining acute and an
+// empty line; its board --json, read through Store.fromCli and NorthStar.dumpOf
+// as the panel reads it, gives dump.northStar.title byte for byte.
+test("AC-40.44 (panel half): a live todocli's North Star reaches dump.northStar.title byte for byte", (t) => {
+  const box = sandbox(t);
+  if (!box) return;
+  const { bin, home, env } = box;
+  const title = "Почему вы здесь? «»—";
+  const description = "Строить то, что важно \u{1F31F}.\n\nКаждый день — ша\u0301г.";
+  const set = spawnSync(bin, ["--json", "northstar", "set", "--title", title, "--description-file", "-"], { env, input: description, encoding: "utf8", cwd: home });
+  assert.equal(set.status, 0, set.stderr);
+  const board = spawnSync(bin, Argv.forAction(bin, { type: "read" }).slice(1), { env, encoding: "utf8", cwd: home });
+  assert.equal(board.status, 0, board.stderr);
+  assert.ok(board.stdout.includes(JSON.stringify(title).slice(1, -1)), "raw UTF-8 in the document, never a \\u escape");
+  const doc = Store.fromCli(board.stdout);
+  const dump = NorthStar.dumpOf({ backend: "cli", loaded: true, hasNorthStar: doc.hasNorthStar, northStar: doc.northStar, error: null }, false, false);
+  assert.deepEqual(Buffer.from(dump.northStar.title, "utf8"), Buffer.from(title, "utf8"));
+  assert.deepEqual([dump.northStar.hasDescription, dump.northStarIcon.state, doc.northStar.description], [true, "set", description]);
 });
