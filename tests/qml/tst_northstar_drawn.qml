@@ -50,9 +50,11 @@ Item {
     }
     function ink(img, item) { var p = item.mapToItem(top, 0, 0); return inkIn(img, p.x, p.y, item.width, item.height, true) }
     // What keeps `shown` from being drawn, and any other line from hiding: [] when nothing does.
+    // `prev` is the bottom of the last shown line in Column order; the star
+    // shares the heading's row, so it is skipped.
     function allDrawn(name, shown) {
       popup.close(); popup.open(); wait(50) // grabImage polishes and renders the window itself
-      var flick = findChild(popup, "northStarScroll"), img = grabImage(top), out = []
+      var flick = findChild(popup, "northStarScroll"), img = grabImage(top), out = [], prev = 0
       for (var line of lines) {
         var t = part(line), p = t.mapToItem(flick, 0, 0), want = shown.indexOf(line) !== -1
         if (t.visible !== want) out.push(line + (want ? " hidden" : " shown"))
@@ -60,6 +62,9 @@ Item {
         if (t.text === "" || t.opacity === 0 || t.height === 0) out.push(line + " empty")
         if (p.y < 0 || p.y + t.height > flick.height || p.x < 0 || p.x + t.width > flick.width + 0.5) out.push(line + " outside the viewport")
         if (ink(img, t) === 0) out.push(line + " not drawn")
+        if (line === "northStarGlyph") continue
+        if (p.y < prev - 0.5) out.push(line + " overlaps the line above")
+        prev = p.y + t.height
       }
       if (flick.contentHeight > flick.height) out.push("clipped: " + flick.contentHeight + " > " + flick.height)
       compare(out, [], name)
@@ -75,8 +80,10 @@ Item {
     }
     function test_a_120_letter_title() {
       read({ title: "Почему".repeat(20), description: ns1.description })
-      allDrawn("120 letters", setLines)
-      verify(part("northStarHeading").lineCount > 1)
+      var img = allDrawn("120 letters", setLines), h = part("northStarHeading"), hp = h.mapToItem(top, 0, 0), lh = h.implicitHeight / h.lineCount
+      verify(h.lineCount > 1)
+      for (var i = 0; i < h.lineCount; i++) verify(inkIn(img, hp.x, hp.y + i * lh, h.width, lh, true) > 0, "heading line " + i)
+      verify(part("northStarCaption").mapToItem(top, 0, 0).y >= hp.y + h.height, "the caption below the heading's last line")
     }
     function test_a_title_only_north_star() {
       read({ title: ns1.title })
