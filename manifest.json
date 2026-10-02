@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "abobreshov.todo",
   "name": "Checklist Todo",
-  "version": "2.1.2",
+  "version": "2.2.0",
   "author": "abobreshov",
   "license": "MIT",
-  "description": "A tiny todo list in the Omarchy bar with a focus, doing/done states, plan steps and notes; keeps its own JSON file or reads and writes through todocli.",
+  "description": "A tiny todo list in the Omarchy bar with a focus, doing/done states, plan steps and notes, and your North Star one click away; keeps its own JSON file or reads and writes through todocli.",
   "homepage": "https://github.com/abobreshov/omarchy-todo",
   "kinds": [
     "bar-widget"

@@ -4,9 +4,10 @@ import Quickshell.Io
 
 // Headless smoke harness (tests/smoke.sh): loads the fork's BarWidget with a
 // fake bar facade in a scratch Quickshell instance and answers IPC on that
-// instance's own socket. It never opens the panel, so no window appears.
-// `qs.Ui` / `qs.Commons` resolve through the Ui and Commons symlinks the
-// script places next to this file.
+// instance's own socket. `qs.Ui` / `qs.Commons` resolve through the Ui and
+// Commons the script places next to this file, with Ui/KeyboardPanel.qml
+// stubbed (tests/qml/imports/KeyboardPanelBase.qml): IPC can open the todo
+// panel and the North Star popup, and still no window appears.
 ShellRoot {
   id: root
 
@@ -53,13 +54,26 @@ ShellRoot {
     property bool foregroundAnimationEnabled: false
     property var activePopout: null
     property var shell: null
+    property int switches: 0
     function showTooltip(target, text) {}
     function hideTooltip(target) {}
     function registerClickTarget(target) {}
     function unregisterClickTarget(target) {}
-    function requestPopout(owner) {}
-    function releasePopout(owner) {}
-    function switchPanelFrom(owner, direction) { return false }
+    // Bar.qml's single-popout coordinator, copied as the shell has it
+    // (tests/coordination-pin.test.mjs pins the copy).
+    function requestPopout(owner) {
+      if (activePopout === owner) return
+      if (activePopout) {
+        if ("closeForPopoutSwitch" in activePopout) activePopout.closeForPopoutSwitch()
+        else if ("close" in activePopout) activePopout.close()
+      }
+      activePopout = owner
+    }
+
+    function releasePopout(owner) {
+      if (activePopout === owner) activePopout = null
+    }
+    function switchPanelFrom(owner, direction) { switches += 1; return false }
     function targetBelongsToWindow() { return true }
     function moduleWidgets(id) { return root.widget ? [root.widget] : [] }
     function run(command) { console.log("SMOKE bar.run called: " + command) }
@@ -100,6 +114,10 @@ ShellRoot {
     function row(id: string): string {
       var rows = loader.item && loader.item.panel ? root.named(loader.item.panel, "todoRows", 0) : null
       if (!rows) return "unavailable"
+      // The stubbed card is an Item under BarWidget's hidden Loader: show
+      // that branch (no window renders it) so `visible` is the row's own.
+      var hidden = loader.item.panel.parent
+      hidden.visible = true
       root.layOut(rows.parent, 0)
       var list = rows.contentItem.children[0].children
       for (var i = 0; i < list.length; i++) {
@@ -107,12 +125,21 @@ ShellRoot {
         if (r.itemData === undefined || r.itemData.id !== id) continue
         var texts = []
         for (var j = 0; j < r.children.length; j++) if (typeof r.children[j].text === "string") texts.push(r.children[j])
-        return JSON.stringify({ glyph: texts[0].text, title: texts[1].text, visible: r.visible && texts[0].visible && texts[1].visible,
+        var out = JSON.stringify({ glyph: texts[0].text, title: texts[1].text, visible: r.visible && texts[0].visible && texts[1].visible,
           opacity: r.opacity, height: r.height, inViewport: r.y >= rows.contentY && r.y + r.height <= rows.contentY + rows.height })
+        hidden.visible = false
+        return out
       }
+      hidden.visible = false
       return "no row"
     }
-    function width(): string { return String(loader.item ? loader.item.implicitWidth : -1) }
+    // The pill and the star sit in a Grid, laid out here as for row().
+    function width(): string { if (loader.item) root.layOut(loader.item, 0); return String(loader.item ? loader.item.implicitWidth : -1) }
+    // Which card the fake bar's coordinator holds: todo | northStar | none.
+    function active(): string {
+      var a = fakeBar.activePopout
+      return !a ? "none" : a === loader.item ? "todo" : a.objectName === "northStarPanel" ? "northStar" : "other"
+    }
     function quit(): void { Qt.quit() }
   }
 }

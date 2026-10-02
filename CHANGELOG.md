@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-02
+
+The North Star (todocli S11). It needs the S11 `todocli`, whose
+`board --json` carries `northStar`; with an older `todocli` or in json mode
+the panel is 2.1.2's, and the star stays hidden.
+
+### Added
+
+- A star after the pill, one icon slot wide (below it on a vertical bar):
+  accent while a North Star is set, dimmed while none is, and hidden in json
+  mode, before the first read and with an older `todocli`. Its tooltip is the
+  title, wrapped at 60 characters, then `North Star · click to open`.
+- A click on the star opens the North Star popup, centred on the bar: the
+  title as a heading, `North Star · updated <when> · via <who>`, the
+  description as typed, an edit hint and a history hint. It is read-only; Esc,
+  a click outside or a second click on the star closes it. Past 520 px it
+  scrolls, with `j`/`k` or the wheel; `r` reloads, `?` shows its keys and Tab
+  moves to the neighbouring bar panel. It opens at the top, and a read keeps
+  the scroll unless the text changed.
+- `*` in the todo list (any tab, Done included) switches to the popup, and
+  `*` in the popup switches back to the list. The two are never open together:
+  each is its own popout owner, so the bar's coordinator closes one as the
+  other opens. In json mode `*` says `North Star needs backend = cli.`, and
+  with an older `todocli` `North Star needs a newer todocli.`.
+- IPC `northStar` toggles the popup. With nothing to show it still opens, and
+  the popup says why. `close` and `hide` close whichever of the two is open.
+  `dump` appends `panelOpen`, `northStar`, `northStarIcon` and
+  `northStarPopup`; every key before them is unchanged.
+- The list's and the Done tab's `?` lines gain `* north star` while the
+  feature is available (cli mode and the key present, set or unset).
+- After a good read, a failing read changes neither the star nor the popup's
+  text: the popup adds one line, `<error> · showing the last good read`.
+
+### Changed
+
+- The vendored contract goldens are `todocli` S11's: `board.json` and
+  `board-streams.json` carry `"northStar": null`, and `board-northstar.json`
+  is new (pins re-taken). `tests/fixtures-schema.test.mjs` checks the boards'
+  key list by directory: `contract/` boards carry `northStar`, the frozen
+  `consumer/` boards do not.
+- The headless QML seams carry the kit's popout coordination
+  (`tests/qml/imports/KeyboardPanelBase.qml`, `PanelBase.qml`), pinned to
+  the installed shell by `tests/coordination-pin.test.mjs`; `tests/smoke.sh`
+  builds its scratch `Ui` with `KeyboardPanel.qml` stubbed the same way.
+
+### Not in this release
+
+- The todo panel's Tab "next panel" fix. It ships on its own as 2.2.1.
+
 ## [2.1.2] - 2026-10-01
 
 ### Fixed

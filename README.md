@@ -9,8 +9,9 @@ for it. By default your data is a plain JSON file; with `backend = cli` every
 read and write goes through [`todocli`](https://github.com/abobreshov/productivity),
 so the same list shows up in Claude Code and Obsidian.
 
-**Version 2.1.2.** Stream views need the S9 `todocli`: `board --json` with
-`streams`. With an older `todocli`, the panel degrades to today's list.
+**Version 2.2.0.** Stream views need the S9 `todocli`: `board --json` with
+`streams`. The North Star needs the S11 `todocli`: `board --json` with
+`northStar`. With an older `todocli`, the panel degrades to today's list.
 
 Forked from https://github.com/tathagat11/omarchy-checklist-todo (MIT) by
 Tathagata Talukdar. Plugin id `abobreshov.todo`; the bar icon, the three
@@ -37,6 +38,10 @@ views, the keys and the JSON-file pattern are upstream's.
 - **Two backends, one look** — `json` keeps a file in
   `~/.local/state/abobreshov.todo/todos.json`; `cli` runs `todocli`. Views,
   keys and copy are identical; cli mode adds a sync footer and `#id`s.
+- **Your North Star** — a star after the pill opens the title and the
+  description you set with `todocli northstar set` (or by asking Claude); `*`
+  flips between it and the list, and `SUPER + ALT + N` can open it from
+  anywhere. Read-only; cli mode with the S11 `todocli`.
 - **Zero dependencies in json mode** — no scripts, no services, no network.
 
 ## Installation
@@ -81,6 +86,7 @@ Click the checkbox icon in the bar (or `omarchy-shell abobreshov.todo toggle`).
 | `?` | Shortcut line | Same |
 | Esc | Close | Back to the list |
 | Tab / Shift+Tab | Neighbouring bar panel | Same |
+| `*` | Switch to the North Star popup (below) | — |
 
 On a done row `s`, `f` and `p` are inert (`#12 is done · d reopens it`); the
 one exception is `p` on the task the running pomodoro is attached to, which
@@ -101,6 +107,67 @@ cancels. Clicking the current level preserves a tuned number such as 80.
 Other keys, hover and sideways scrolling leave the picked task in place;
 vertical scrolling still works. In compose, `!` and `z` are ordinary text.
 The detail fields show the stored number, including `priority: low (0)`.
+
+### North Star
+
+With the S11 `todocli` (`board --json` carries `northStar`), a star sits
+right after the pill (below it on a vertical bar), one icon slot wide. It
+shows your North Star: the one title and description set with `todocli
+northstar set` or by asking Claude. The panel only reads it, from the same
+`board --json` read as the list.
+
+| Star | When | Tooltip |
+| --- | --- | --- |
+| accent | a North Star is set | the title, wrapped at 60 code points, then `North Star · click to open` |
+| dim | none is set, or the stored value is not one | `North Star · not set` / `Set it with todocli northstar set, or ask Claude.` |
+| hidden, no slot | json mode, before the first read, an older `todocli` | — |
+
+A left click opens the popup (a middle or right click does nothing),
+centred on the bar like the todo panel and 400 px wide: the star and the
+title, `North Star · updated 21:40 · via cli`, the description as typed,
+`Edit with todocli northstar set … or ask Claude.` and `Earlier versions:
+todocli northstar history`. It is read-only and live; past 520 px it
+scrolls, and each open starts at the top. While it is open the star draws
+its own open mark.
+
+| Key in the popup | Does |
+| --- | --- |
+| Esc | Close (so does a click outside the card or on the star) |
+| `*` | Switch to the todo list (the remembered tab, the landing row) |
+| `j` `k` / Down Up | Scroll |
+| `r` | Reload |
+| `?` | Its key line |
+| Tab / Shift+Tab | Neighbouring bar panel |
+
+Every other key does nothing. `*` in the todo list (any tab, the Done tab
+and a busy store included) switches to the popup; it does nothing before the
+first read, in move mode, with a picker open, in the detail view or the error
+view, and compose types it. The todo panel and the popup are never open
+together: switching ends the list's session state as any close does (a
+compose draft is dropped, move mode ends).
+
+The chord: copy `~/.config/hypr/bindings.lua` to `bindings.lua.bak.<epoch>`,
+then add this line to it, once 2.2.0 is installed:
+
+```lua
+o.bind("SUPER + ALT + N", "North Star", "omarchy-shell abobreshov.todo northStar")
+```
+
+One press opens the popup, a second closes it; with the todo panel open the
+first press switches.
+
+| State | Star | `*` in the list | Star click | IPC `northStar` | Popup |
+| --- | --- | --- | --- | --- | --- |
+| set | accent | the popup | the popup | `ok` | the North Star |
+| unset (`null` or malformed) | dim | the popup | the popup | `ok` | `No North Star yet.` and how to set it |
+| json mode | hidden | `North Star needs backend = cli.` | — | that line; opens | that line |
+| an older `todocli` (no key) | hidden | `North Star needs a newer todocli.` | — | that line; opens | that line |
+| before the first read | hidden | nothing | — | `unavailable`; opens | `Loading…` |
+| an error before any read (E4) | hidden | nothing | — | `unavailable: <reason>`; opens | `<error>.` and `The todo list shows what went wrong.` |
+| busy (E5) after a read | unchanged | the popup | the popup | `ok` | the last good text and `<error> · showing the last good read` |
+| an error (E4, E7, E8) after a read | unchanged | nothing | the popup | `ok` | the last good text and `<error> · showing the last good read` |
+| the todo panel not loaded | the pill only | — | — | `unavailable` | — |
+| panel 2.1.x with the S11 `todocli` | none (2.1.x ignores the key) | — | — | no function | — |
 
 ## Settings
 
@@ -183,6 +250,7 @@ omarchy-shell abobreshov.todo openTask <id>                   # -> ok | "Task <i
 omarchy-shell abobreshov.todo refresh                         # -> ok (re-reads on every monitor)
 omarchy-shell abobreshov.todo syncNow                         # -> ok | "Sync needs backend = cli."
 omarchy-shell abobreshov.todo tab <name>                      # -> ok | unknown stream | ambiguous stream | E21/E22/E23
+omarchy-shell abobreshov.todo northStar                       # -> ok | unavailable[: <reason>] | "North Star needs backend = cli." | "North Star needs a newer todocli."
 omarchy-shell abobreshov.todo dump                            # -> one JSON line
 ```
 
@@ -190,7 +258,12 @@ In cli mode a mutator's reply means *accepted*, not committed: `todocli` runs
 asynchronously and the store reflects the change within a couple of seconds.
 From a known error state every mutator replies `unavailable: <reason>`.
 `dump` returns `{version, backend, cliPath, view, stale, error, pill, focus,
-open, done, banner, footer, message, tab, streams, strip, horizonFilter, moving, rows}`.
+open, done, banner, footer, message, tab, streams, strip, horizonFilter, moving, rows}`,
+then `panelOpen`, `northStar` (`null`, or `{title, hasDescription}`),
+`northStarIcon` (`{state: hidden | unset | set, tooltip}`) and
+`northStarPopup` (`null` while closed, else `{state, stale}`). `northStar`
+toggles the popup and writes nothing; `close` and `hide` close whichever of
+the todo panel and the popup is open.
 
 ## Data
 
@@ -208,9 +281,32 @@ omarchy plugin remove abobreshov.todo
 rm -rf ~/.local/state/abobreshov.todo      # optional, json data
 ```
 
+## Rolling back the panel
+
+The panel and `todocli` roll back independently: 2.1.x ignores the North
+Star, and 2.2.0 hides it from an older `todocli`. To return the installed
+panel to 2.1.2 (`e2b0985`):
+
+```bash
+git -C ~/.config/omarchy/plugins/abobreshov.todo reset --hard e2b0985   # on its branch, never a detached checkout
+omarchy restart shell
+```
+
+`omarchy plugin update abobreshov.todo` still fast-forwards the clone
+afterwards, because `e2b0985` is an ancestor of every later release. With
+2.1.2 back the chord calls a function that no longer exists, so remove its
+line from `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + N", "North Star", "omarchy-shell abobreshov.todo northStar")
+```
+
+Remove the line rather than restoring `bindings.lua.bak.<epoch>`: the copy
+would also undo any edit made to the file since.
+
 ## Development
 
-All logic lives in sixteen `.pragma library` files, one concern each; the QML
+All logic lives in eighteen `.pragma library` files, one concern each; the QML
 files bind and forward.
 
 | Library | Holds |
@@ -231,21 +327,27 @@ files bind and forward.
 | `Streams.js` | Grouped Overview, stream blocks and sections, done tails, Done-tab day rows, filter/count/empty copy and document-wide slots. |
 | `Cursor.js` | Selectable rows, identity anchoring and temporary-id translation, minimal scroll adjustment. |
 | `Argv.js` | The argv builders for `todocli`, `omarchy-shell` and `install`. |
+| `NorthStar.js` | The North Star's board key, glyph and every string; `normalize` (the identity on what todocli wrote), the tooltip's wrapping, the star's and the popup's states (`barState`, `bodyState`, `popupModel`), `sameText` and `dumpOf`. |
+| `NorthStarKeys.js` | `*` in the todo list (`keyIntent`), the popup's keys (`popupKey`, `scrollTo`, `SCROLL_STEP`) and IPC `northStar` (`ipcIntent`). |
 
 Libraries import each other with `.import "X.js" as X` (Priority imports
-nothing; Model uses Priority; Errors, Argv and RowActions use Model; Store uses
-Model, Priority and Errors; Queue uses Store; Cursor uses Queue; Order and
+nothing; Model uses Priority; Errors, Argv and RowActions use Model; NorthStar
+uses Model and Errors; NorthStarKeys uses NorthStar and Errors; Store uses
+Model, Priority, Errors and NorthStar; Queue uses Store; Cursor uses Queue; Order and
 Pickers use Model, Priority and Queue; Tabs uses Model, Order and Priority;
-Streams uses Model, Order and Tabs; View uses Model, Streams, Tabs, Pickers and
-RowActions; Chrome and Pomodoro use Model, Errors and View; Keys uses Model,
-View, Tabs, Cursor, Streams and Pickers), and `tests/qml-js-loader.mjs`
+Streams uses Model, Order and Tabs; View uses Model, Streams, Tabs, Pickers,
+RowActions and NorthStar; Chrome and Pomodoro use Model, Errors and View; Keys
+uses Model, View, Tabs, Cursor, Streams, Pickers and NorthStarKeys), and `tests/qml-js-loader.mjs`
 resolves the same lines under Node.
 `Store.reduce(doc, action)` is the one mutation API: the keys emit an action
 (`add`, `setStatus`, `focus`, `toggleStep`, `remove`), `Argv.forAction` maps
 it to a `todocli` command and both stores apply it through
 `perform(action, done)`.
 
-QML: `BarWidget.qml` (the pill and the IPC handler), `Panel.qml` (the
+QML: `BarWidget.qml` (the pill, the North Star's star and popup, and the IPC
+handler), `NorthStarButton.qml` (the star), `NorthStarPanel.qml` (the
+popup's root, its own popout owner) and `NorthStarBody.qml` (its card),
+`Panel.qml` (the
 composition root: settings, the store switch, the reducer wiring and the
 operations the IPC functions, keys and buttons call), `PanelBody.qml` (the
 keyboard surface and view composition), the views
@@ -258,7 +360,9 @@ alike so `Panel.qml` never asks which backend it is, `PomodoroLink.qml` and
 a shell string) and reports a binary that cannot be spawned. Every `Text`
 that shows user text sets `textFormat: Text.PlainText`; the pill and tooltip
 text (kit-owned) goes through `Model.pillLabel`/`Model.tooltip`, which turn
-`<`/`>` into `‹`/`›`.
+`<`/`>` into `‹`/`›`. The star's tooltip carries the North Star's title as
+stored, because `dump` reports it exactly and the bar draws tooltips as plain
+text.
 
 Size: the plugin is about 3,500 lines of QML and JS against the 1,800 the
 plan budgeted (upstream is ~690). The difference is the UX surface, not extra
@@ -326,6 +430,14 @@ offscreen platform: the real `TaskRow.qml` against the installed shell's
 UX §4.2 as a gate: the row's height and its icon cluster's geometry are one
 value before, during and after a hover, including with the pointer resting
 on a ghost button (`docs/reports/HOVER-GLITCH-VIDEO.md` in the root repository).
+The North Star's probes run the same way: `tst_northstar.qml` (the star's
+slot and the popup's bodies), `tst_northstar_drawn.qml` (every popup line
+inked inside the card in a grab), `tst_northstar_bar.qml` and
+`tst_northstar_switch.qml` (the real widget on a fake bar that runs the
+shell's popout coordinator: states, the star's ink per state, IPC, `*`, and
+never two popups). The seams copy that coordination from the shell, and
+`tests/coordination-pin.test.mjs` fails when the installed shell's copy
+changes.
 
 The lint recipe by hand: `/usr/lib/qt6/bin/qmllint -I <dir-with-a-qs-symlink>
 *.qml`, where `<dir>/qs -> /usr/share/omarchy/shell`. The baseline holds the

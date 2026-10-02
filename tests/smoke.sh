@@ -4,7 +4,9 @@
 # Quickshell instance with a fake bar and a scratch HOME, so nothing of the
 # real shell or the real state directories is touched). Needs `qs` and a
 # Wayland session. Covers the IPC halves of AC-2.2, 2.3, 2.4, 2.6, 2.10, 7.7,
-# 13.1, 13.4, 17.1, 17.2, 17.4.
+# 13.1, 13.4, 17.1, 17.2, 17.4, and the North Star's AC-ST.79, 80 and 88.
+# The scratch Ui is the shell's with KeyboardPanel.qml stubbed, as
+# tests/qml/run.sh builds it, so IPC can open both cards without a window.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +18,10 @@ root="$scratch/root"
 home="$scratch/home"
 mkdir -p "$root" "$home/.local/state/tathagat11.checklist-todo"
 cp "$here/tests/smoke/shell.qml" "$root/shell.qml"
-ln -sfn "$shell_dir/Ui" "$root/Ui"
+mkdir -p "$root/Ui"
+for source in "$shell_dir"/Ui/*; do ln -sfn "$source" "$root/Ui/$(basename "$source")"; done
+rm "$root/Ui/KeyboardPanel.qml"
+cp "$here/tests/qml/imports/KeyboardPanelBase.qml" "$root/Ui/KeyboardPanel.qml"
 ln -sfn "$shell_dir/Commons" "$root/Commons"
 cp "$here/tests/fixtures/upstream-v1.json" "$home/.local/state/tathagat11.checklist-todo/todos.json"
 fake="$here/tests/fakebin/todocli"
@@ -247,6 +252,58 @@ start "{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
 sleep 0.8
 check "P2 old CLI catalogue" "$(dump | field 'd["streams"]')" "[]"
 check "P2 old CLI strip" "$(dump | field 'd["strip"]')" "None"
+stop
+
+# ---- the North Star (ADDENDUM-S11 §4.7; AC-ST.79, 80, 88) --------------------
+smoke() { qs ipc -p "$root" call smoke "$@"; }
+cli="{\"backend\":\"cli\",\"cliPath\":\"$fake\"}"
+ns_board="$scratch/board-ns.json"
+cp "$here/tests/fixtures/contract/board-northstar.json" "$ns_board"
+export FAKE_BOARD="$ns_board"
+start "$cli"
+sleep 0.8
+check "NS dump: today's keys, then the four" "$(dump | field 'list(d.keys())[-5:]')" "['message', 'panelOpen', 'northStar', 'northStarIcon', 'northStarPopup']"
+check "NS dump.northStar" "$(dump | field 'd["northStar"]')" "{'title': 'Почему вы здесь?', 'hasDescription': True}"
+check "NS dump.northStarIcon set" "$(dump | field 'd["northStarIcon"]')" "{'state': 'set', 'tooltip': 'Почему вы здесь?\\nNorth Star · click to open'}"
+check "NS view stays list" "$(dump | field 'd["view"] + " " + str(d["northStarPopup"])')" "list None"
+check "IPC northStar opens the popup" "$(call northStar)" "ok"
+check "NS popup set" "$(dump | field 'd["northStarPopup"]')" "{'state': 'set', 'stale': False}"
+check "NS the bar holds the popup" "$(smoke active)" "northStar"
+check "IPC northStar again closes it" "$(call northStar)" "ok"
+check "NS popup closed" "$(dump | field 'd["northStarPopup"]')" "None"
+for pair in toggle:todo northStar:northStar toggle:todo northStar:northStar northStar:none open:todo northStar:northStar close:none; do
+  call "${pair%%:*}" >/dev/null
+  check "AC-ST.80 never both after ${pair%%:*}" "$(dump | field 'not (d["panelOpen"] and d["northStarPopup"] is not None)') $(smoke active)" "True ${pair#*:}"
+done
+rm "$ns_board"
+check "NS a failing read" "$(call refresh)" "ok"
+sleep 0.8
+check "NS stale, not blank: IPC ok" "$(call northStar)" "ok"
+check "NS stale popup and icon" "$(dump | field 'd["northStarPopup"]["state"] + " " + str(d["northStarPopup"]["stale"]) + " " + d["northStarIcon"]["state"] + " " + d["error"]["kind"]')" "set True set failed"
+check "NS argv: board reads only" "$(python3 -c 'import json, sys; print(sorted(set(json.loads(l)["argv"][3] for l in open(sys.argv[1]))))' "$FAKE_LOG")" "['board']"
+stop
+export FAKE_BOARD="$here/tests/fixtures/consumer/board-empty-stream.json"
+start "$cli"
+sleep 0.8
+hidden="$(smoke width)"
+check "NS older todocli: IPC" "$(call northStar)" "North Star needs a newer todocli."
+check "NS older todocli: popup and icon" "$(dump | field 'd["northStarPopup"]["state"] + " " + d["northStarIcon"]["state"] + " " + repr(d["northStarIcon"]["tooltip"])')" "older hidden ''"
+stop
+export FAKE_BOARD="board-streams.json"
+start "$cli"
+sleep 0.8
+check "NS width(): the star adds one slot to the same pill" "$(python3 -c 'import sys; print(round(float(sys.argv[1]) - float(sys.argv[2]), 3))' "$(smoke width)" "$hidden")" "27.0"
+check "NS unset: IPC and icon" "$(call northStar) $(dump | field 'd["northStarIcon"]["state"] + " " + d["northStarPopup"]["state"]')" "ok unset unset"
+stop
+start '{"backend":"json"}'
+sleep 0.4
+check "NS json mode: IPC" "$(call northStar)" "North Star needs backend = cli."
+check "NS json mode: popup and icon" "$(dump | field 'd["northStarPopup"]["state"] + " " + d["northStarIcon"]["state"]')" "json hidden"
+stop
+start '{"backend":"cli","cliPath":"/nonexistent/todocli"}'
+sleep 0.8
+check "NS E4 before any read: IPC" "$(call northStar)" "unavailable: todocli not found"
+check "NS E4 before any read: popup" "$(dump | field 'd["northStarPopup"]["state"]')" "error"
 stop
 
 # Any warning that names one of the plugin's files fails the run (a QML

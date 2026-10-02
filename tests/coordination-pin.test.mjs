@@ -2,7 +2,8 @@
 // run is the installed shell's. The QML seams copy two pieces of the shell:
 // Ui/KeyboardPanel.qml's onOpenChanged block (the popout request, release
 // and switch flags) into tests/qml/imports/KeyboardPanelBase.qml, and
-// plugins/bar/Bar.qml's requestPopout and releasePopout into the fake bars.
+// plugins/bar/Bar.qml's requestPopout and releasePopout into the fake bars
+// (tests/qml/FakeBar.qml and tests/smoke/shell.qml).
 // This test reads `$OMARCHY_PATH/shell` (default /usr/share/omarchy/shell),
 // read-only, and compares each pair whitespace-normalised, so an Omarchy
 // update that changes either fails here, not on the live bar.
@@ -35,7 +36,9 @@ function block(source, head, name) {
 const pairs = [
   ["Ui/KeyboardPanel.qml", /^[ \t]*onOpenChanged:\s*\{/, "qml/imports/KeyboardPanelBase.qml"],
   ["plugins/bar/Bar.qml", /^[ \t]*function requestPopout\(owner\)\s*\{/, "qml/FakeBar.qml"],
-  ["plugins/bar/Bar.qml", /^[ \t]*function releasePopout\(owner\)\s*\{/, "qml/FakeBar.qml"]
+  ["plugins/bar/Bar.qml", /^[ \t]*function releasePopout\(owner\)\s*\{/, "qml/FakeBar.qml"],
+  ["plugins/bar/Bar.qml", /^[ \t]*function requestPopout\(owner\)\s*\{/, "smoke/shell.qml"],
+  ["plugins/bar/Bar.qml", /^[ \t]*function releasePopout\(owner\)\s*\{/, "smoke/shell.qml"]
 ];
 
 test("AC-ST.92: the seams' copied coordination is the installed shell's, whitespace-normalised", () => {
