@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-05
+
+### Fixed
+
+- Tab and Shift+Tab in the todo panel move to the neighbouring bar panel, as
+  the `?` help says. The panel handed the bar its own item instead of the
+  widget, so the bar found no slot and nothing happened; the North Star
+  popup's Tab already worked. The headless Panel stub now runs the kit's
+  `switchPanel` line, which had hidden it.
+
 ## [2.2.0] - 2026-10-02
 
 The North Star (todocli S11). It needs the S11 `todocli`, whose
@@ -266,7 +276,10 @@ Forked from [tathagat11/omarchy-checklist-todo](https://github.com/tathagat11/om
 - Every monitor's bar stays in sync via a directory watch.
 - Standard Omarchy bar-widget behaviour: move/reorder, enable/disable, hot reload.
 
-[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/abobreshov/omarchy-todo/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/abobreshov/omarchy-todo/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.2...v2.2.0
+[2.1.2]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/abobreshov/omarchy-todo/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/abobreshov/omarchy-todo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/abobreshov/omarchy-todo/compare/v1.0.0...v2.0.0

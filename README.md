@@ -9,7 +9,7 @@ for it. By default your data is a plain JSON file; with `backend = cli` every
 read and write goes through [`todocli`](https://github.com/abobreshov/productivity),
 so the same list shows up in Claude Code and Obsidian.
 
-**Version 2.2.0.** Stream views need the S9 `todocli`: `board --json` with
+**Version 2.2.1.** Stream views need the S9 `todocli`: `board --json` with
 `streams`. The North Star needs the S11 `todocli`: `board --json` with
 `northStar`. With an older `todocli`, the panel degrades to today's list.
 
