@@ -121,6 +121,19 @@ Item {
       }
     }
 
+    // F-1 (2.2.1): Tab in the todo panel hands the bar the widget, the slot's
+    // item, as the popup's Tab does; the panel item itself matches no slot.
+    function test_tab_in_the_todo_panel_opens_the_next_panel() {
+      rig.bar.next = other
+      for (var mod of [Qt.NoModifier, Qt.ShiftModifier]) {
+        rig.widget.open(); rig.todoBody().focusTarget.forceActiveFocus()
+        keyPress(Qt.Key_Tab, mod); keyRelease(Qt.Key_Tab, mod)
+        compare([other.opened, rig.dump().panelOpen], [true, false], "the next panel opens instead " + mod)
+        other.close()
+      }
+      compare(rig.bar.switches.map(function(s) { return [s.owner === rig.widget, s.direction] }), [[true, 1], [true, -1]], "Tab and Shift+Tab pass the widget")
+    }
+
     function test_never_two_popups() {
       rig.bar.next = other
       var steps = [["toggle", function() { rig.widget.togglePanel() }, rig.widget], ["northStar", function() { rig.widget.northStarIpc() }, rig.popup(), "todo"],

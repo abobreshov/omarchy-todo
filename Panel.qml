@@ -208,7 +208,7 @@ Panel {
       case "syncNow": syncNow(); break
       case "message": showMessage(action.text); break
       case "close": root.close(); break
-      case "switchPanel": root.switchPanel(action.direction); break
+      case "switchPanel": if (hostWidget && hostWidget.bar) hostWidget.bar.switchPanelFrom(hostWidget, action.direction); break   // the slot's item, as the popup passes (F-1)
       case "composeOpened": bodyPanel.openCompose(action.prefill); break
       case "northStar": if (hostWidget) hostWidget.openNorthStar(); break
       default: break

@@ -1,7 +1,9 @@
 import QtQuick
 // The kit Panel (Ui/Panel.qml), headless: `opened` is a plain property in
-// place of the PanelController, and the popout-switch lines are the kit's.
+// place of the PanelController, and the popout-switch and switchPanel lines
+// are the kit's (switchPanel hands the bar this panel item as the owner).
 Item {
+  id: root
   property var bar: null
   property var settings: ({})
   property string moduleName: ""
@@ -19,5 +21,8 @@ Item {
     Qt.callLater(function() { popoutSwitchClosing = false })
   }
   function toggle() { opened ? close() : open() }
-  function switchPanel(direction) {}
+  function switchPanel(direction) {
+    if (bar && typeof bar.switchPanelFrom === "function") return bar.switchPanelFrom(root, direction)
+    return false
+  }
 }
